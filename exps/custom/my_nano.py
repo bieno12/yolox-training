@@ -85,8 +85,8 @@ class Exp(MyExp):
         from yolox.data import COCODataset, ValTransform
         return COCODataset(
             data_dir=self.data_dir,
-            json_file=self.val_ann,
-            name='test',
+            json_file=self.test_ann if kwargs.get('testdev', False) else self.val_ann,
+            name='test' if kwargs.get('testdev', False) else 'train',
             img_size=self.test_size,
             preproc=ValTransform(legacy=kwargs.get('legacy', False)),
         )
