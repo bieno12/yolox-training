@@ -19,8 +19,9 @@ class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
         self.data_dir = "data/tracking"
-        self.train_ann = "train_10th.json"
-        self.val_ann = "test.json"
+        self.train_ann = os.getenv("TRAIN_ANN", "train.json")
+        self.val_ann = os.getenv("VAL_ANN", "test.json")
+        self.batch_size = int(os.getenv("BATCH_SIZE", "8"))
         
         self.num_classes = 1
         self.depth = 0.33
@@ -39,14 +40,14 @@ class Exp(MyExp):
 
         self.warmup_lr = 1e-6  # Very low LR at the start to prevent sudden jumps
         self.min_lr_ratio = 0.05  # Allows gradual learning rate decay
-        self.basic_lr_per_img = 0.001 / 8  # Standard learning rate per image (adjustable with batch size)
+        self.basic_lr_per_img = 0.001 / self.batch_size # Standard learning rate per image (adjustable with batch size)
 
         self.random_size = (12, 26)
         self.test_conf = 0.01
         self.nmsthre = 0.7
         
         self.print_interval = 10  # Log every iteration for detailed monitoring
-        self.eval_interval = 10 # Evaluate every epoch
+        self.eval_interval = 2 # Evaluate every epoch
 
         self.save_history_ckpt = False
         
