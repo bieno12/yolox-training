@@ -1,10 +1,19 @@
 import os
 import numpy as np
 import json
-import cv2
 import argparse
+import configparser
 
-def process_split(data_path, out_path, split, half_video, sequence=None, percentile=1.0):
+def get_sequence_info(seq_path):
+    seq_info_path = os.path.join(seq_path, 'seqinfo.ini')
+    config = configparser.ConfigParser()
+    config.read(seq_info_path)
+    
+    width = int(config['Sequence']['imWidth'])
+    height = int(config['Sequence']['imHeight'])
+    return width, height
+
+def process_split(data_path, out_path, split, half_video, sequence=None, start_percentile=0.0, end_percentile=1.0):
     out = {'images': [], 'annotations': [], 'videos': [],
            'categories': [{'id': 1, 'name': 'pedestrian'}]}
     seqs = os.listdir(data_path)
@@ -25,19 +34,19 @@ def process_split(data_path, out_path, split, half_video, sequence=None, percent
         seq_path = os.path.join(data_path, seq)
         img_path = os.path.join(seq_path, 'img1')
         ann_path = os.path.join(seq_path, 'gt/gt.txt')
+        
+        width, height = get_sequence_info(seq_path)
+        
         images = os.listdir(img_path)
         num_images = len([image for image in images if 'jpg' in image])
         
-        if half_video:
-            image_range = [0, num_images // 2]
-        else:
-            image_range = [0, int(num_images * (percentile)) - 1]
-
+        start_idx = int(num_images * start_percentile)
+        end_idx = int(num_images * end_percentile) - 1
+        image_range = [start_idx, end_idx]
+        
         for i in range(num_images):
             if i < image_range[0] or i > image_range[1]:
                 continue
-            img = cv2.imread(os.path.join(data_path, '{}/img1/{:06d}.jpg'.format(seq, i + 1)))
-            height, width = img.shape[:2]
             image_info = {'file_name': '{}/img1/{:06d}.jpg'.format(seq, i + 1),
                           'id': image_cnt + i + 1,
                           'frame_id': i + 1 - image_range[0],
@@ -84,7 +93,8 @@ def main():
     parser.add_argument('--split', type=str, choices=['train', 'test'], required=True, help="Dataset split to process")
     parser.add_argument('--half_video', action='store_true', help="Process only half of each video")
     parser.add_argument('--sequence', type=str, help="Process a specific sequence only")
-    parser.add_argument('--percentile', type=float, default=1.0, help="Percentage of each video to process (default: 1.0)")
+    parser.add_argument('--start_percentile', type=float, default=0.0, help="Starting percentage of each video to process (default: 0.0)")
+    parser.add_argument('--end_percentile', type=float, default=1.0, help="Ending percentage of each video to process (default: 1.0)")
     parser.add_argument('--output', type=str, help="Custom name for the output annotation JSON file")
     
     args = parser.parse_args()
@@ -93,7 +103,7 @@ def main():
     out_filename = args.output if args.output else '{}.json'.format(args.split)
     out_path = os.path.join('data/tracking/annotations', out_filename)
     
-    process_split(data_path, out_path, args.split, args.half_video, args.sequence, args.percentile)
+    process_split(data_path, out_path, args.split, args.half_video, args.sequence, args.start_percentile, args.end_percentile)
 
 if __name__ == '__main__':
     main()
