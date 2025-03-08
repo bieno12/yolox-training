@@ -46,7 +46,7 @@ class Exp(MyExp):
         self.test_conf = 0.01
         self.nmsthre = 0.7
         
-        self.print_interval = 10  # Log every iteration for detailed monitoring
+        self.print_interval = 40  # Log every iteration for detailed monitoring
         self.eval_interval = 2 # Evaluate every epoch
 
         self.save_history_ckpt = False
