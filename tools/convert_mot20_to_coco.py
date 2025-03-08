@@ -101,6 +101,7 @@ def main():
     
     data_path = os.path.join('data/tracking', args.split)
     out_filename = args.output if args.output else '{}.json'.format(args.split)
+    os.makedirs('data/tracking/annotations', exist_ok=True)
     out_path = os.path.join('data/tracking/annotations', out_filename)
     
     process_split(data_path, out_path, args.split, args.half_video, args.sequence, args.start_percentile, args.end_percentile)
