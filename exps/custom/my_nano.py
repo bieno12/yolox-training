@@ -18,10 +18,11 @@ import torch.distributed as dist
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
-        self.data_dir = "data/tracking"
-        self.train_ann = os.getenv("TRAIN_ANN", "train.json")
-        self.val_ann = os.getenv("VAL_ANN", "test.json")
-        self.batch_size = int(os.getenv("BATCH_SIZE", "8"))
+        self.data_dir = os.getenv("EXP_DATA_DIR", "data/tracking")
+        self.train_ann = os.getenv("EXP_TRAIN_ANN", "train.json")
+        self.val_ann = os.getenv("EXP_VAL_ANN", "val.json")
+        self.batch_size = int(os.getenv("EXP_BATCH_SIZE", "8"))
+        self.test_ann = os.getenv("EXP_TEST_ANN", "test.json")
         
         self.num_classes = 1
         self.depth = 0.33
