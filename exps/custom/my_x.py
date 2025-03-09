@@ -39,7 +39,7 @@ class Exp(MyExp):
         
         self.save_history_ckpt = False
         
-
+        self.legacy = False
         #override using env vars
         self.set_envvars()
     
