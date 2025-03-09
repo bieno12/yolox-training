@@ -11,11 +11,11 @@ class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
         
-        self.data_dir = os.getenv("EXP_DATA_DIR", "data/tracking")
-        self.train_ann = os.getenv("EXP_TRAIN_ANN", "train.json")
-        self.val_ann = os.getenv("EXP_VAL_ANN", "val.json")
-        self.batch_size = int(os.getenv("EXP_BATCH_SIZE", "8"))
-        self.test_ann = os.getenv("EXP_TEST_ANN", "test.json")
+        self.data_dir = "data/tracking"
+        self.train_ann = "train.json"
+        self.val_ann = "val.json"
+        self.batch_size = 4
+        self.test_ann = "test.json"
         
         self.num_classes = 1
         self.depth = 1.33
@@ -26,9 +26,9 @@ class Exp(MyExp):
         self.test_size = (800, 1440)
         self.random_size = (18, 32)
         
-        self.max_epoch = int(os.getenv("EXP_MAX_EPOCH", "20"))
-        self.no_aug_epochs = int(os.getenv("EXP_NO_AUG_EPOCHS", "10"))
-        self.warmup_epochs = int(os.getenv("EXP_WARMUP_EPOCHS", "3"))
+        self.max_epoch = 30
+        self.no_aug_epochs = 15
+        self.warmup_epochs = 5
         self.basic_lr_per_img = 0.001 / self.batch_size # Standard learning rate per image (adjustable with batch size)
         
         self.print_interval = 20
@@ -39,8 +39,7 @@ class Exp(MyExp):
         
         self.save_history_ckpt = False
         
-        self.legacy = os.getenv("EXP_LEGACY", "False").lower() == "true"
-              
+
         #override using env vars
         self.set_envvars()
     
