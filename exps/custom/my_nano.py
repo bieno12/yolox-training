@@ -18,11 +18,11 @@ import torch.distributed as dist
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
-        self.data_dir = os.getenv("EXP_DATA_DIR", "data/tracking")
-        self.train_ann = os.getenv("EXP_TRAIN_ANN", "train.json")
-        self.val_ann = os.getenv("EXP_VAL_ANN", "val.json")
-        self.batch_size = int(os.getenv("EXP_BATCH_SIZE", "8"))
-        self.test_ann = os.getenv("EXP_TEST_ANN", "test.json")
+        self.data_dir = "data/tracking"
+        self.train_ann = "train.json"
+        self.val_ann = "val.json"
+        self.batch_size = 8
+        self.test_ann = "test.json"
         
         self.num_classes = 1
         self.depth = 0.33
@@ -52,6 +52,19 @@ class Exp(MyExp):
 
         self.save_history_ckpt = False
         
+        #override using env vars
+        self.set_envvars()
+    
+    def set_envvars(self):
+        for key, value in os.environ.items():
+            if key.startswith("EXP_PROP_"):
+                prop_name = key[9:].lower()
+                if hasattr(self, prop_name):
+                    attr_type = type(getattr(self, prop_name))
+                    try:
+                        setattr(self, prop_name, attr_type(value))
+                    except ValueError:
+                        print(f"Warning: Could not convert {key}={value} to type {attr_type}")
     def get_model(self, sublinear=False):
 
         def init_yolo(M):

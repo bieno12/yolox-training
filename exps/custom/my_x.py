@@ -40,7 +40,21 @@ class Exp(MyExp):
         self.save_history_ckpt = False
         
         self.legacy = os.getenv("EXP_LEGACY", "False").lower() == "true"
-        
+              
+        #override using env vars
+        self.set_envvars()
+    
+    def set_envvars(self):
+        for key, value in os.environ.items():
+            if key.startswith("EXP_PROP_"):
+                prop_name = key[9:].lower()
+                if hasattr(self, prop_name):
+                    attr_type = type(getattr(self, prop_name))
+                    try:
+                        setattr(self, prop_name, attr_type(value))
+                    except ValueError:
+                        print(f"Warning: Could not convert {key}={value} to type {attr_type}")
+                        
     def get_dataset(self, cache = False, cache_type = "ram"):
         from yolox.data import COCODataset, TrainTransform
 
