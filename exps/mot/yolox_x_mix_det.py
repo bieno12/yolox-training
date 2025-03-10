@@ -20,8 +20,8 @@ class Exp(MyExp):
         self.width = 1.25
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
-        self.input_size = (800, 1440)
-        self.test_size = (800, 1440)
+        self.input_size = (896, 1600)
+        self.test_size = (896, 1600)
         self.random_size = (18, 32)
         self.max_epoch = 80
         self.print_interval = 20

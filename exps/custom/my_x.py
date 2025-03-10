@@ -22,17 +22,17 @@ class Exp(MyExp):
         self.width = 1.25
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
-        self.input_size = (800, 1440)
-        self.test_size = (800, 1440)
+        self.input_size = (896, 1600)
+        self.test_size = (896, 1600)
         self.random_size = (18, 32)
         
-        self.max_epoch = 30
-        self.no_aug_epochs = 15
+        self.max_epoch = 20
+        self.no_aug_epochs = 5
         self.warmup_epochs = 5
         self.basic_lr_per_img = 0.001 / self.batch_size # Standard learning rate per image (adjustable with batch size)
         
         self.print_interval = 20
-        self.eval_interval = 2
+        self.eval_interval = 1
         
         self.test_conf = 0.01
         self.nmsthre = 0.7
