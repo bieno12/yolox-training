@@ -39,7 +39,7 @@ class Exp(MyExp):
         from yolox.data import COCODataset, TrainTransform
 
         if self.legacy:
-            from ..legacy import TrainTransform
+            from legacy import TrainTransform
             transform = TrainTransform(
                 rgb_means=(0.485, 0.456, 0.406),
                 std=(0.229, 0.224, 0.225),
