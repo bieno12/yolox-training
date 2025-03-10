@@ -36,7 +36,7 @@ class Exp(MyExp):
         self.ema = True
         self.max_epoch = 30
         self.warmup_epochs = 5  # Gradually increase learning rate to avoid instability
-        self.no_aug_epochs = 15 
+        self.no_aug_epochs = 5 
 
 
         self.warmup_lr = 1e-6  # Very low LR at the start to prevent sudden jumps
