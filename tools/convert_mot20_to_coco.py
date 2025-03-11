@@ -13,7 +13,7 @@ def get_sequence_info(seq_path):
     height = int(config['Sequence']['imHeight'])
     return width, height
 
-def process_split(data_path, out_path, split, half_video, sequence=None, start_percentile=0.0, end_percentile=1.0):
+def process_split(data_path, out_path, split, half_video, sequence=None, start_percentile=0.0, end_percentile=1.0, sample_rate=1):
     out = {'images': [], 'annotations': [], 'videos': [],
            'categories': [{'id': 1, 'name': 'pedestrian'}]}
     seqs = os.listdir(data_path)
@@ -44,24 +44,22 @@ def process_split(data_path, out_path, split, half_video, sequence=None, start_p
         end_idx = int(num_images * end_percentile) - 1
         image_range = [start_idx, end_idx]
         
-        for i in range(num_images):
-            if i < image_range[0] or i > image_range[1]:
-                continue
+        for i in range(start_idx, end_idx + 1, sample_rate):
             image_info = {'file_name': '{}/img1/{:06d}.jpg'.format(seq, i + 1),
                           'id': image_cnt + i + 1,
                           'frame_id': i + 1 - image_range[0],
-                          'prev_image_id': image_cnt + i if i > 0 else -1,
-                          'next_image_id': image_cnt + i + 2 if i < num_images - 1 else -1,
+                          'prev_image_id': image_cnt + i - sample_rate if i - sample_rate >= 0 else -1,
+                          'next_image_id': image_cnt + i + sample_rate if i + sample_rate <= end_idx else -1,
                           'video_id': video_cnt,
                           'height': height, 'width': width}
             out['images'].append(image_info)
-        print('{}: {} images processed'.format(seq, num_images))
+        print('{}: {} images processed'.format(seq, len(out['images'])))
 
         anns = np.loadtxt(ann_path, dtype=np.float32, delimiter=',')
         
         for i in range(anns.shape[0]):
             frame_id = int(anns[i][0])
-            if frame_id - 1 < image_range[0] or frame_id - 1 > image_range[1]:
+            if frame_id - 1 < image_range[0] or frame_id - 1 > image_range[1] or (frame_id - 1) % sample_rate != 0:
                 continue
             track_id = int(anns[i][1])
             cat_id = int(anns[i][7])
@@ -83,7 +81,7 @@ def process_split(data_path, out_path, split, half_video, sequence=None, start_p
                     'iscrowd': 0,
                     'area': float(anns[i][4] * anns[i][5])}
             out['annotations'].append(ann)
-        image_cnt += num_images
+        image_cnt += len(range(start_idx, end_idx + 1, sample_rate))
         print(tid_curr, tid_last)
     print('Processed {} split: {} images, {} annotations'.format(split, len(out['images']), len(out['annotations'])))
     json.dump(out, open(out_path, 'w'))
@@ -95,6 +93,7 @@ def main():
     parser.add_argument('--sequence', type=str, help="Process a specific sequence only")
     parser.add_argument('--start_percentile', type=float, default=0.0, help="Starting percentage of each video to process (default: 0.0)")
     parser.add_argument('--end_percentile', type=float, default=1.0, help="Ending percentage of each video to process (default: 1.0)")
+    parser.add_argument('--sample_rate', type=int, default=1, help="Frame sampling rate (default: 1, meaning every frame is processed)")
     parser.add_argument('--output', type=str, help="Custom name for the output annotation JSON file")
     
     args = parser.parse_args()
@@ -104,7 +103,7 @@ def main():
     os.makedirs('data/tracking/annotations', exist_ok=True)
     out_path = os.path.join('data/tracking/annotations', out_filename)
     
-    process_split(data_path, out_path, args.split, args.half_video, args.sequence, args.start_percentile, args.end_percentile)
+    process_split(data_path, out_path, args.split, args.half_video, args.sequence, args.start_percentile, args.end_percentile, args.sample_rate)
 
 if __name__ == '__main__':
     main()
