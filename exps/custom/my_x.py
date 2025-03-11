@@ -12,8 +12,8 @@ class Exp(MyExp):
         super(Exp, self).__init__()
         
         self.data_dir = "data/tracking"
-        self.train_ann = "train.json"
-        self.val_ann = "val.json"
+        self.train_ann = "train_half.json"
+        self.val_ann = "val_half.json"
         self.batch_size = 4
         self.test_ann = "test.json"
         
