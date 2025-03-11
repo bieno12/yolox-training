@@ -26,8 +26,8 @@ class Exp(MyExp):
         self.test_size = (896, 1600)
         self.random_size = (18, 32)
         
-        self.max_epoch = 50
-        self.no_aug_epochs = 7
+        self.max_epoch = 20
+        self.no_aug_epochs = 5
         self.warmup_epochs = 5
         self.basic_lr_per_img = 0.001 / self.batch_size # Standard learning rate per image (adjustable with batch size)
         
