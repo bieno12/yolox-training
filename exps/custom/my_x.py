@@ -62,7 +62,7 @@ class Exp(MyExp):
                     except (ValueError, SyntaxError) as e:
                         print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
                 else:
-                    raise ValueError(f"Unknown property {prop_name}")
+                    print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
     def get_dataset(self, cache = False, cache_type = "ram"):
         from yolox.data import COCODataset, TrainTransform
 
