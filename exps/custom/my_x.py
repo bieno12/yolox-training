@@ -39,7 +39,9 @@ class Exp(MyExp):
         
         self.save_history_ckpt = False
         
+        # my props
         self.legacy = False
+        self.max_labels = 230
         #override using env vars
         self.set_envvars()
     
@@ -68,10 +70,10 @@ class Exp(MyExp):
             transform = TrainTransform(
                 rgb_means=(0.485, 0.456, 0.406),
                 std=(0.229, 0.224, 0.225),
-                max_labels=500,
+                max_labels=self.max_labels,
             )
         else:
-            transform = TrainTransform(max_labels=500)
+            transform = TrainTransform(max_labels=self.max_labels)
             
         return COCODataset(
             data_dir=self.data_dir,
