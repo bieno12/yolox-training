@@ -39,11 +39,12 @@ class Exp(MyExp):
         
         self.save_history_ckpt = False
         
-        self.mosaic_scale=(0.5, 1.5)
-        self.mixup_scale=(0.5, 1.5)
         # my props
         self.legacy = False
         self.max_labels = 230
+        
+        self.mosaic_scale = (0.8, 1.3)
+        self.mixup_scale = (0.8, 1.2)
         #override using env vars
         self.set_envvars()
     
@@ -63,8 +64,7 @@ class Exp(MyExp):
                         setattr(self, prop_name, new_value)
                     except (ValueError, SyntaxError) as e:
                         print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
-                else:
-                    print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
+                        
     def get_dataset(self, cache = False, cache_type = "ram"):
         from yolox.data import COCODataset, TrainTransform
 
