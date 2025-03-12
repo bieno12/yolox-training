@@ -39,6 +39,8 @@ class Exp(MyExp):
         
         self.save_history_ckpt = False
         
+        self.mosaic_scale=(0.5, 1.5)
+        self.mixup_scale=(0.5, 1.5)
         # my props
         self.legacy = False
         self.max_labels = 230
