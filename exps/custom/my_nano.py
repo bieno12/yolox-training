@@ -5,17 +5,15 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 
-from yolox.exp import Exp as MyExp
-# encoding: utf-8
 import os
 import random
 import torch
 import torch.nn as nn
 import torch.distributed as dist
 
+from exps.custom.base_exp import BaseExp
 
-
-class Exp(MyExp):
+class Exp(BaseExp):
     def __init__(self):
         super(Exp, self).__init__()
         self.data_dir = "data/tracking"
@@ -27,7 +25,6 @@ class Exp(MyExp):
         self.num_classes = 1
         self.depth = 0.33
         self.width = 0.25
-        self.scale = (0.5, 1.5)
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
         self.input_size = (608, 1088)
@@ -55,23 +52,6 @@ class Exp(MyExp):
         #override using env vars
         self.set_envvars()
     
-    def set_envvars(self):
-        for key, value in os.environ.items():
-            if key.startswith("EXP_PROP_"):
-                prop_name = key[9:].lower()
-                if hasattr(self, prop_name):
-                    current_value = getattr(self, prop_name)
-                    try:
-                        if isinstance(current_value, bool):
-                            new_value = value.lower() == "true"
-                        elif isinstance(current_value, (list, tuple)):
-                            new_value = type(current_value)(eval(value))
-                        else:
-                            new_value = type(current_value)(value)
-                        setattr(self, prop_name, new_value)
-                    except (ValueError, SyntaxError) as e:
-                        print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
-                        
     def get_model(self, sublinear=False):
 
         def init_yolo(M):
@@ -90,36 +70,4 @@ class Exp(MyExp):
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
         return self.model
-    def get_dataset(self, cache = False, cache_type = "ram"):
-        from yolox.data import COCODataset, TrainTransform
-        return COCODataset(
-            data_dir=self.data_dir,
-            json_file=self.train_ann,
-            name='train',
-            img_size=self.input_size,
-            preproc=TrainTransform(max_labels=500),
-            cache=cache,
-            cache_type=cache_type,
-        )
     
-    def get_eval_dataset(self, **kwargs):
-        from yolox.data import COCODataset, ValTransform
-        return COCODataset(
-            data_dir=self.data_dir,
-            json_file=self.test_ann if kwargs.get('testdev', False) else self.val_ann,
-            name='test' if kwargs.get('testdev', False) else 'train',
-            img_size=self.test_size,
-            preproc=ValTransform(legacy=kwargs.get('legacy', False)),
-        )
-    def get_evaluator(self, batch_size, is_distributed, testdev=False, legacy=False):
-        from yolox.evaluators import COCOEvaluator
-        val_loader = self.get_eval_loader(batch_size, is_distributed, testdev=testdev, legacy=legacy)
-        evaluator = COCOEvaluator(
-            dataloader=val_loader,
-            img_size=self.test_size,
-            confthre=self.test_conf,
-            nmsthre=self.nmsthre,
-            num_classes=self.num_classes,
-            testdev=testdev,
-        )
-        return evaluator
