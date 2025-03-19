@@ -4,7 +4,7 @@ import random
 import torch
 import torch.nn as nn
 import torch.distributed as dist
-from .base_exp import BaseExp
+from exps.custom.base_exp import BaseExp
 
 class Exp(BaseExp):
     def __init__(self):

@@ -17,12 +17,12 @@ class Exp(BaseExp):
     def __init__(self):
         super(Exp, self).__init__()
         self.data_dir = "data/tracking"
-        self.train_ann = "train_half.json"
-        self.val_ann = "val_half.json"
-        self.test_ann = "test.json"
+        self.train_ann = "train_head_half.json"
+        self.val_ann = "val_head_half.json"
         self.batch_size = 8
+        self.test_ann = "test.json"
         
-        self.num_classes = 1
+        self.num_classes = 2
         self.depth = 0.33
         self.width = 0.25
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
@@ -40,8 +40,8 @@ class Exp(BaseExp):
         self.min_lr_ratio = 0.05  # Allows gradual learning rate decay
         self.basic_lr_per_img = 0.001 / self.batch_size # Standard learning rate per image (adjustable with batch size)
 
-        self.random_size = (6, 12)
-        self.test_conf = 0.1
+        self.random_size = (12, 26)
+        self.test_conf = 0.01
         self.nmsthre = 0.7
         
         self.mosaic_prob = 1.0

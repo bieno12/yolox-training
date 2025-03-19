@@ -13,7 +13,9 @@ def get_sequence_info(seq_path):
     height = int(config['Sequence']['imHeight'])
     return width, height
 
-def process_split(data_path, out_path, split, half_video, sequence=None, start_percentile=0.0, end_percentile=1.0, sample_rate=1):
+def process_split(data_path, out_path, split, half_video, sequence=None, 
+                 start_percentile=0.0, end_percentile=1.0, sample_rate=1, 
+                 visibility_threshold=0.0):  # Added visibility threshold parameter
     out = {'images': [], 'annotations': [], 'videos': [],
            'categories': [{'id': 1, 'name': 'pedestrian'}]}
     seqs = os.listdir(data_path)
@@ -22,6 +24,7 @@ def process_split(data_path, out_path, split, half_video, sequence=None, start_p
     video_cnt = 0
     tid_curr = 0
     tid_last = -1
+    filtered_objects_count = 0  # Counter for filtered low visibility objects
     
     if sequence:
         seqs = [sequence] if sequence in seqs else []
@@ -94,6 +97,16 @@ def process_split(data_path, out_path, split, half_video, sequence=None, start_p
                 
             track_id = int(anns[i][1])
             cat_id = int(anns[i][7])
+            
+            # Check visibility (column 8 in MOT16 format contains visibility ratio)
+            # MOT16 format: [frame_id, track_id, bb_left, bb_top, bb_width, bb_height, confidence, class_id, visibility]
+            visibility = anns[i][8] if anns[i].shape[0] > 8 else 1.0
+            
+            # Skip objects with visibility below threshold
+            if visibility < visibility_threshold:
+                filtered_objects_count += 1
+                continue
+                
             ann_cnt += 1
             if not (int(anns[i][6]) == 1):  # whether ignore.
                 continue
@@ -103,19 +116,23 @@ def process_split(data_path, out_path, split, half_video, sequence=None, start_p
             if not track_id == tid_last:
                 tid_curr += 1
                 tid_last = track_id
+            
             ann = {'id': ann_cnt,
-                    'category_id': category_id,
-                    'image_id': image_cnt + frame_id,
-                    'track_id': tid_curr,
-                    'bbox': anns[i][2:6].tolist(),
-                    'conf': float(anns[i][6]),
-                    'iscrowd': 0,
-                    'area': float(anns[i][4] * anns[i][5])}
+                   'category_id': category_id,
+                   'image_id': image_cnt + frame_id,
+                   'track_id': tid_curr,
+                   'bbox': anns[i][2:6].tolist(),
+                   'conf': float(anns[i][6]),
+                   'iscrowd': 0,
+                   'visibility': float(visibility),  # Add visibility to annotation
+                   'area': float(anns[i][4] * anns[i][5])}
             out['annotations'].append(ann)
+        
         image_cnt += num_images
         print(tid_curr, tid_last)
-    print('Processed {} split: {} images, {} annotations (sample rate: {})'.format(
-        split, len(out['images']), len(out['annotations']), sample_rate))
+    
+    print('Processed {} split: {} images, {} annotations, {} objects filtered due to low visibility (sample rate: {}, visibility threshold: {})'.format(
+        split, len(out['images']), len(out['annotations']), filtered_objects_count, sample_rate, visibility_threshold))
     json.dump(out, open(out_path, 'w'))
 
 def main():
@@ -127,6 +144,8 @@ def main():
     parser.add_argument('--end_percentile', type=float, default=1.0, help="Ending percentage of each video to process (default: 1.0)")
     parser.add_argument('--sample_rate', type=int, default=1, help="Process every Nth frame (default: 1, which processes all frames)")
     parser.add_argument('--output', type=str, help="Custom name for the output annotation JSON file")
+    parser.add_argument('--visibility_threshold', type=float, default=0.0, 
+                        help="Filter objects with visibility below this threshold (default: 0.0, meaning no filtering)")
     
     args = parser.parse_args()
     
@@ -135,13 +154,19 @@ def main():
         print("Warning: Sample rate must be at least 1. Setting to default value of 1.")
         args.sample_rate = 1
     
+    # Validate visibility threshold
+    if args.visibility_threshold < 0.0 or args.visibility_threshold > 1.0:
+        print("Warning: Visibility threshold must be between 0.0 and 1.0. Setting to default value of 0.0 (no filtering).")
+        args.visibility_threshold = 0.0
+    
     data_path = os.path.join('data/tracking', args.split)
     out_filename = args.output if args.output else '{}.json'.format(args.split)
     os.makedirs('data/tracking/annotations', exist_ok=True)
     out_path = os.path.join('data/tracking/annotations', out_filename)
     
     process_split(data_path, out_path, args.split, args.half_video, args.sequence, 
-                 args.start_percentile, args.end_percentile, args.sample_rate)
+                 args.start_percentile, args.end_percentile, args.sample_rate,
+                 args.visibility_threshold)
 
 if __name__ == '__main__':
     main()
