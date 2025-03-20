@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 
-from exps.custom.base_exp import BaseExp
+from yolox.exp import Exp as BaseExp
 
 class Exp(BaseExp):
     def __init__(self):
@@ -73,3 +73,26 @@ class Exp(BaseExp):
         self.model.head.initialize_biases(1e-2)
         return self.model
     
+    def get_dataset(self, cache = False, cache_type = "ram"):
+        from yolox.data import COCODataset, TrainTransform
+        transform = TrainTransform(max_labels=self.max_labels)
+            
+        return COCODataset(
+            data_dir=self.data_dir,
+            json_file=self.train_ann,
+            name='train',
+            img_size=self.input_size,
+            preproc=transform,
+            cache=cache,
+            cache_type=cache_type,
+        )
+
+    def get_eval_dataset(self, **kwargs):
+        from yolox.data import COCODataset, ValTransform
+        return COCODataset(
+            data_dir=self.data_dir,
+            json_file=self.test_ann if kwargs.get('testdev', False) else self.val_ann,
+            name='test' if kwargs.get('testdev', False) else 'train',
+            img_size=self.test_size,
+            preproc=ValTransform(legacy=self.legacy),
+        )
