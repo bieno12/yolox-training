@@ -13,15 +13,14 @@ def setup_directory_structure(base_dir, output_dir):
     # Create output directory and annotations subdirectory
     os.makedirs(os.path.join(base_dir, output_dir, "annotations"), exist_ok=True)
     
-    # Create symbolic links for all datasets
-    os.chdir(os.path.join(base_dir, output_dir))
+
     
     datasets = {
-        "mot_train": "../mot/train",
-        "crowdhuman_train": "../crowdhuman/train",
-        "crowdhuman_val": "../crowdhuman/val",
-        "cp_train": "../Cityscapes",
-        "ethz_train": "../ETHZ"
+        "mot_train": os.path.join(base_dir, "mot/train"),
+        "crowdhuman_train": os.path.join(base_dir, "crowdhuman/train"),
+        "crowdhuman_val": os.path.join(base_dir, "crowdhuman/val"),
+        "cp_train": os.path.join(base_dir, "Cityscapes"),
+        "ethz_train": os.path.join(base_dir, "ETHZ")
     }
     
     for link_name, target in datasets.items():
@@ -32,7 +31,6 @@ def setup_directory_structure(base_dir, output_dir):
             except OSError as e:
                 print(f"Warning: Could not create symlink {link_name}: {e}")
     
-    os.chdir('..')
 
 
 def process_mot_dataset(base_dir, dataset_name, output_dir):
