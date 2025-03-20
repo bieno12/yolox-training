@@ -159,7 +159,7 @@ def main():
     
     # Determine data paths
     data_root = args.data_root
-    data_file_path = os.path.join(data_root, args.data_file)
+    data_file_path = args.data_file
     
     # Determine output path
 
