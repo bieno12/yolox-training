@@ -15,7 +15,7 @@ def load_paths(data_path):
     label_files = [x.replace('images', 'labels_with_ids').replace('.png', '.txt').replace('.jpg', '.txt') for x in img_files]
     return img_files, label_files
 
-def process_split(img_paths, label_paths, out_path, start_percentile=0.0, end_percentile=1.0, 
+def process_split(img_paths, label_paths, out_path, data_path_prefix, start_percentile=0.0, end_percentile=1.0, 
                   sample_rate=1, random_seed=None, max_samples=None):
     """Process the dataset and create JSON annotations with flexible sampling options."""
     out = {'images': [], 'annotations': [], 'categories': [{'id': 1, 'name': 'person'}]}
@@ -65,7 +65,7 @@ def process_split(img_paths, label_paths, out_path, start_percentile=0.0, end_pe
         
         # Get image dimensions
         try:
-            im = Image.open(os.path.join("datasets", img_path))
+            im = Image.open(os.path.join(data_path_prefix, img_path))
             image_info = {
                 'file_name': img_path, 
                 'id': image_cnt,
@@ -75,33 +75,37 @@ def process_split(img_paths, label_paths, out_path, start_percentile=0.0, end_pe
             out['images'].append(image_info)
             
             # Load and process labels
-            if os.path.isfile(os.path.join("datasets", label_path)):
-                labels0 = np.loadtxt(os.path.join("datasets", label_path), dtype=np.float32).reshape(-1, 6)
-                
-                if len(labels0) > 0:  # Check if the array is not empty
-                    # Normalized xywh to pixel xyxy format
-                    labels = labels0.copy()
-                    labels[:, 2] = image_info['width'] * (labels0[:, 2] - labels0[:, 4] / 2)
-                    labels[:, 3] = image_info['height'] * (labels0[:, 3] - labels0[:, 5] / 2)
-                    labels[:, 4] = image_info['width'] * labels0[:, 4]
-                    labels[:, 5] = image_info['height'] * labels0[:, 5]
+            full_label_path = os.path.join(data_path_prefix, label_path)
+            if os.path.isfile(full_label_path):
+                try:
+                    labels0 = np.loadtxt(full_label_path, dtype=np.float32).reshape(-1, 6)
                     
-                    # Add annotations
-                    for i in range(len(labels)):
-                        ann_cnt += 1
-                        fbox = labels[i, 2:6].tolist()
-                        ann = {
-                            'id': ann_cnt,
-                            'category_id': 1,
-                            'image_id': image_cnt,
-                            'track_id': int(labels0[i, 1]) if labels0[i, 1] >= 0 else -1,  # Use track ID if available
-                            'bbox': fbox,
-                            'area': fbox[2] * fbox[3],
-                            'iscrowd': 0
-                        }
-                        out['annotations'].append(ann)
+                    if len(labels0) > 0:  # Check if the array is not empty
+                        # Normalized xywh to pixel xyxy format
+                        labels = labels0.copy()
+                        labels[:, 2] = image_info['width'] * (labels0[:, 2] - labels0[:, 4] / 2)
+                        labels[:, 3] = image_info['height'] * (labels0[:, 3] - labels0[:, 5] / 2)
+                        labels[:, 4] = image_info['width'] * labels0[:, 4]
+                        labels[:, 5] = image_info['height'] * labels0[:, 5]
+                        
+                        # Add annotations
+                        for i in range(len(labels)):
+                            ann_cnt += 1
+                            fbox = labels[i, 2:6].tolist()
+                            ann = {
+                                'id': ann_cnt,
+                                'category_id': 1,
+                                'image_id': image_cnt,
+                                'track_id': int(labels0[i, 1]) if labels0[i, 1] >= 0 else -1,  # Use track ID if available
+                                'bbox': fbox,
+                                'area': fbox[2] * fbox[3],
+                                'iscrowd': 0
+                            }
+                            out['annotations'].append(ann)
+                except Exception as e:
+                    print(f"\nError processing label file {label_path}: {e}")
         except Exception as e:
-            print(f"\nError processing {img_path}: {e}")
+            print(f"\nError processing image {img_path}: {e}")
             skipped_images += 1
         
         # Update progress bar with additional stats
@@ -124,6 +128,8 @@ def process_split(img_paths, label_paths, out_path, start_percentile=0.0, end_pe
 
 def main():
     parser = argparse.ArgumentParser(description="ETHZ Dataset Processing Tool")
+    parser.add_argument('--data_path', type=str, default='datasets',
+                        help="Root path to the dataset directory (default: datasets)")
     parser.add_argument('--data_file', type=str, default='datasets/data_path/eth.train', 
                         help="Path to the text file containing image paths")
     parser.add_argument('--output', type=str, default='datasets/ETHZ/annotations/train.json',
@@ -148,6 +154,7 @@ def main():
     
     # Display configuration
     print("Configuration:")
+    print(f"  Data path: {args.data_path}")
     print(f"  Data file: {args.data_file}")
     print(f"  Output: {args.output}")
     print(f"  Start percentile: {args.start_percentile}")
@@ -166,6 +173,7 @@ def main():
         img_paths, 
         label_paths, 
         args.output,
+        args.data_path,
         start_percentile=args.start_percentile,
         end_percentile=args.end_percentile,
         sample_rate=args.sample_rate,
