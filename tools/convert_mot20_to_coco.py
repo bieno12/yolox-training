@@ -137,6 +137,7 @@ def process_split(data_path, out_path, split, half_video, sequence=None,
 
 def main():
     parser = argparse.ArgumentParser(description="MOT16 Data Processing Tool")
+    parser.add_argument('--data_dir', type=str, default='data/tracking', help="dataset directory")
     parser.add_argument('--split', type=str, choices=['train', 'test'], required=True, help="Dataset split to process")
     parser.add_argument('--half_video', action='store_true', help="Process only half of each video")
     parser.add_argument('--sequence', type=str, help="Process a specific sequence only")
@@ -159,7 +160,7 @@ def main():
         print("Warning: Visibility threshold must be between 0.0 and 1.0. Setting to default value of 0.0 (no filtering).")
         args.visibility_threshold = 0.0
     
-    data_path = os.path.join('data/tracking', args.split)
+    data_path = os.path.join(args.data_dir, args.split)
     out_filename = args.output if args.output else '{}.json'.format(args.split)
     os.makedirs('data/tracking/annotations', exist_ok=True)
     out_path = os.path.join('data/tracking/annotations', out_filename)
