@@ -32,7 +32,7 @@ def setup_directory_structure(base_dir, output_dir):
             except OSError as e:
                 print(f"Warning: Could not create symlink {link_name}: {e}")
     
-    os.chdir(base_dir)
+    os.chdir('..')
 
 
 def process_mot_dataset(base_dir, dataset_name, output_dir):
