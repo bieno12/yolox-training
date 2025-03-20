@@ -15,7 +15,7 @@ def load_paths(data_path):
     label_files = [x.replace('images', 'labels_with_ids').replace('.png', '.txt').replace('.jpg', '.txt') for x in img_files]
     return img_files, label_files
 
-def process_split(img_paths, label_paths, out_path, data_path_prefix, start_percentile=0.0, end_percentile=1.0, 
+def process_split(img_paths, label_paths, out_path, data_root, start_percentile=0.0, end_percentile=1.0, 
                   sample_rate=1, random_seed=None, max_samples=None):
     """Process the dataset and create JSON annotations with flexible sampling options."""
     out = {'images': [], 'annotations': [], 'categories': [{'id': 1, 'name': 'person'}]}
@@ -65,7 +65,7 @@ def process_split(img_paths, label_paths, out_path, data_path_prefix, start_perc
         
         # Get image dimensions
         try:
-            im = Image.open(os.path.join(data_path_prefix, img_path))
+            im = Image.open(os.path.join(data_root, img_path))
             image_info = {
                 'file_name': img_path, 
                 'id': image_cnt,
@@ -75,11 +75,13 @@ def process_split(img_paths, label_paths, out_path, data_path_prefix, start_perc
             out['images'].append(image_info)
             
             # Load and process labels
-            full_label_path = os.path.join(data_path_prefix, label_path)
-            if os.path.isfile(full_label_path):
+            if os.path.isfile(os.path.join(data_root, label_path)):
                 try:
-                    labels0 = np.loadtxt(full_label_path, dtype=np.float32).reshape(-1, 6)
+                    labels0 = np.loadtxt(os.path.join(data_root, label_path), dtype=np.float32).reshape(-1, 6)
                     
+                    if len(labels0.shape) == 1 and labels0.shape[0] == 6:  # Single detection
+                        labels0 = labels0.reshape(1, 6)
+                        
                     if len(labels0) > 0:  # Check if the array is not empty
                         # Normalized xywh to pixel xyxy format
                         labels = labels0.copy()
@@ -104,8 +106,10 @@ def process_split(img_paths, label_paths, out_path, data_path_prefix, start_perc
                             out['annotations'].append(ann)
                 except Exception as e:
                     print(f"\nError processing label file {label_path}: {e}")
+            else:
+                pbar.write(f"Warning: Label file not found: {label_path}")
         except Exception as e:
-            print(f"\nError processing image {img_path}: {e}")
+            print(f"\nError processing {img_path}: {e}")
             skipped_images += 1
         
         # Update progress bar with additional stats
@@ -128,12 +132,13 @@ def process_split(img_paths, label_paths, out_path, data_path_prefix, start_perc
 
 def main():
     parser = argparse.ArgumentParser(description="ETHZ Dataset Processing Tool")
-    parser.add_argument('--data_path', type=str, default='datasets',
-                        help="Root path to the dataset directory (default: datasets)")
-    parser.add_argument('--data_file', type=str, default='datasets/data_path/eth.train', 
-                        help="Path to the text file containing image paths")
-    parser.add_argument('--output', type=str, default='datasets/ETHZ/annotations/train.json',
-                        help="Path to the output JSON file")
+    parser.add_argument('--data_root', type=str, default='datasets',
+                        help="Root directory of the dataset (default: 'datasets')")
+    parser.add_argument('--data_file', type=str, default='data_path/eth.train', 
+                        help="Path to the text file containing image paths, relative to data_root")
+
+    parser.add_argument('--output_name', type=str, default='train.json',
+                        help="Name of the output JSON file (default: 'train.json')")
     parser.add_argument('--start_percentile', type=float, default=0.0,
                         help="Starting percentile of dataset to process (default: 0.0)")
     parser.add_argument('--end_percentile', type=float, default=1.0,
@@ -152,28 +157,43 @@ def main():
         print("Warning: Sample rate must be at least 1. Setting to default value of 1.")
         args.sample_rate = 1
     
+    # Determine data paths
+    data_root = args.data_root
+    data_file_path = os.path.join(data_root, args.data_file)
+    
+    # Determine output path
+
+    output_dir = os.path.join(data_root, 'ETHZ', 'annotations')
+    
+    out_path = os.path.join(output_dir, args.output_name)
+    
     # Display configuration
     print("Configuration:")
-    print(f"  Data path: {args.data_path}")
-    print(f"  Data file: {args.data_file}")
-    print(f"  Output: {args.output}")
+    print(f"  Data root: {data_root}")
+    print(f"  Data file: {data_file_path}")
+    print(f"  Output path: {out_path}")
     print(f"  Start percentile: {args.start_percentile}")
     print(f"  End percentile: {args.end_percentile}")
     print(f"  Sample rate: {args.sample_rate}")
     print(f"  Random seed: {args.random_seed}")
     print(f"  Max samples: {args.max_samples}")
     
+    # Check if data file exists
+    if not os.path.isfile(data_file_path):
+        print(f"Error: Data file not found: {data_file_path}")
+        return
+    
     # Load image and label paths
     print("Loading image and label paths...")
-    img_paths, label_paths = load_paths(args.data_file)
+    img_paths, label_paths = load_paths(data_file_path)
     print(f"Found {len(img_paths)} images in data file")
     
     # Process the dataset with the specified parameters
     process_split(
         img_paths, 
         label_paths, 
-        args.output,
-        args.data_path,
+        out_path,
+        data_root,
         start_percentile=args.start_percentile,
         end_percentile=args.end_percentile,
         sample_rate=args.sample_rate,
