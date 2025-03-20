@@ -4,6 +4,7 @@ import json
 import argparse
 from PIL import Image
 import random
+import tqdm
 
 def load_func(fpath):
     """Load ODGT annotations from file."""
@@ -36,6 +37,7 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
     # Process a random subset based on percentage
     if subset_percentage < 1.0:
         num_images = int(len(anns_data) * subset_percentage)
+        print(f"Selecting {num_images} images ({subset_percentage*100:.1f}% of {len(anns_data)} total)")
         selected_anns = random.sample(anns_data, num_images)
     else:
         selected_anns = anns_data
@@ -45,6 +47,9 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
     ann_cnt = 0
     filtered_boxes = 0
     
+    # Create progress bar
+    progress_bar = tqdm.tqdm(total=len(selected_anns), desc=f"Processing {split}")
+    
     for ann_data in selected_anns:
         image_cnt += 1
         file_path = os.path.join(data_path, f'{split}', f"{ann_data['ID']}.jpg")
@@ -52,6 +57,7 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
         # Check if image file exists
         if not os.path.exists(file_path):
             print(f"Warning: Image {file_path} not found, skipping")
+            progress_bar.update(1)
             continue
         
         # Get image dimensions
@@ -66,11 +72,14 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
             out['images'].append(image_info)
         except Exception as e:
             print(f"Error processing image {file_path}: {e}")
+            progress_bar.update(1)
             continue
         
         # Process annotations for this image
         if split != 'test':
             anns = ann_data['gtboxes']
+            annotations_added = 0
+            
             for i in range(len(anns)):
                 # Calculate visibility ratio if both boxes are present
                 visibility_ratio = 0.0
@@ -88,6 +97,7 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
                     continue
                 
                 ann_cnt += 1
+                annotations_added += 1
                 fbox = anns[i]['fbox']
                 
                 ann = {
@@ -104,6 +114,16 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
                                    anns[i]['extra']['ignore'] == 1 else 0
                 }
                 out['annotations'].append(ann)
+            
+            # Update progress bar description with current counts
+            if image_cnt % 100 == 0:
+                progress_bar.set_description(
+                    f"Processing {split}: {image_cnt} images, {ann_cnt} annotations"
+                )
+        
+        progress_bar.update(1)
+    
+    progress_bar.close()
     
     # Print statistics
     print(f'Processed {split} split: {len(out["images"])} images ({subset_percentage*100:.1f}% of original), '
@@ -112,7 +132,8 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     
-    # Save output
+    # Save output with progress indication
+    print(f'Saving annotations to {out_path}...')
     json.dump(out, open(out_path, 'w'))
     print(f'Output saved to {out_path}')
 
@@ -134,6 +155,18 @@ def main():
                         help="Filter boxes with visibility ratio below this threshold (0.0-1.0)")
     
     args = parser.parse_args()
+    
+    # Show initial configuration
+    print("=" * 50)
+    print("CrowdHuman Dataset Processing")
+    print("=" * 50)
+    print(f"Split: {args.split}")
+    print(f"Data path: {args.data_path}")
+    print(f"Subset percentage: {args.subset_percentage*100:.1f}%")
+    print(f"Minimum visibility threshold: {args.min_visibility*100:.1f}%")
+    if args.random_seed is not None:
+        print(f"Random seed: {args.random_seed}")
+    print("=" * 50)
     
     # Validate parameters
     if args.subset_percentage <= 0.0 or args.subset_percentage > 1.0:
@@ -159,6 +192,8 @@ def main():
     process_split(args.data_path, out_path, args.split, 
                  args.subset_percentage, args.random_seed, 
                  args.min_visibility)
+    
+    print("Processing complete!")
 
 if __name__ == '__main__':
     main()
