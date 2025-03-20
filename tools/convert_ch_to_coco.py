@@ -47,7 +47,7 @@ def process_split(data_path, out_path, split, subset_percentage=1.0,
     
     for ann_data in selected_anns:
         image_cnt += 1
-        file_path = os.path.join(data_path, f'CrowdHuman_{split}', f"{ann_data['ID']}.jpg")
+        file_path = os.path.join(data_path, f'{split}', f"{ann_data['ID']}.jpg")
         
         # Check if image file exists
         if not os.path.exists(file_path):
