@@ -6,31 +6,41 @@ import shutil
 from pathlib import Path
 
 
-def setup_directory_structure(base_dir, output_dir):
+def setup_directory_structure(base_dir, output_dir, datasets_to_mix, test_dataset):
     """Create the necessary directory structure and copy validation/test files."""
     print(f"Setting up directory structure in {output_dir}")
     
     # Create output directory and annotations subdirectory
     os.makedirs(os.path.join(base_dir, output_dir, "annotations"), exist_ok=True)
     
-
-    
+    # Base datasets mapping
     datasets = {
-        "mot_train": os.path.join(base_dir, "mot/train"),
-        "crowdhuman_train": os.path.join(base_dir, "crowdhuman/train"),
-        "crowdhuman_val": os.path.join(base_dir, "crowdhuman/val"),
-        "cp_train": os.path.join(base_dir, "Cityscapes"),
-        "ethz_train": os.path.join(base_dir, "ETHZ")
+        f"{test_dataset}_train": os.path.join(base_dir, f"{test_dataset}/train")
     }
     
-    for link_name, target in datasets.items():
-        if not os.path.exists(link_name):
-            try:
-                os.symlink(os.path.join(base_dir, output_dir, target), link_name)
-                print(f"Created symlink: {link_name} -> {target}")
-            except OSError as e:
-                print(f"Warning: Could not create symlink {link_name}: {e}")
+    # Add additional datasets based on what's being mixed
+    if "crowdhuman_train" in datasets_to_mix:
+        datasets["crowdhuman_train"] = os.path.join(base_dir, "crowdhuman/train")
+        
+    if "crowdhuman_val" in datasets_to_mix:
+        datasets["crowdhuman_val"] = os.path.join(base_dir, "crowdhuman/val")
+        
+    if "cityscapes" in datasets_to_mix:
+        datasets["cp_train"] = os.path.join(base_dir, "Cityscapes")
+        
+    if "ethz" in datasets_to_mix:
+        datasets["ethz_train"] = os.path.join(base_dir, "ETHZ")
     
+    # Create symlinks for each dataset
+    for link_name, target in datasets.items():
+        link_path = os.path.join(base_dir, output_dir, link_name)
+        if not os.path.exists(link_path):
+            try:
+                os.makedirs(os.path.dirname(link_path), exist_ok=True)
+                os.symlink(target, link_path)
+                print(f"Created symlink: {link_path} -> {target}")
+            except OSError as e:
+                print(f"Warning: Could not create symlink {link_path}: {e}")
 
 
 def process_mot_dataset(base_dir, dataset_name, output_dir):
@@ -129,7 +139,7 @@ def copy_test_files(base_dir, source_dataset, output_dir):
 def mix_datasets(base_dir, output_dir, datasets_to_mix, test_dataset):
     """Mix the specified datasets and save the result."""
     # Setup directory structure
-    setup_directory_structure(base_dir, output_dir)
+    setup_directory_structure(base_dir, output_dir, datasets_to_mix, test_dataset)
     
     # Copy test files from the selected test dataset
     copy_test_files(base_dir, test_dataset, output_dir)
