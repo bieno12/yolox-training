@@ -26,7 +26,7 @@ def setup_directory_structure(base_dir, output_dir):
     for link_name, target in datasets.items():
         if not os.path.exists(link_name):
             try:
-                os.symlink(target, link_name)
+                os.symlink(os.path.join(base_dir, output_dir, target), link_name)
                 print(f"Created symlink: {link_name} -> {target}")
             except OSError as e:
                 print(f"Warning: Could not create symlink {link_name}: {e}")
