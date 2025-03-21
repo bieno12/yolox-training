@@ -15,7 +15,7 @@ def setup_directory_structure(base_dir, output_dir, datasets_to_mix, test_datase
     
     # Base datasets mapping
     datasets = {
-        f"{test_dataset}_train": os.path.join(base_dir, f"{test_dataset}/train")
+        f"train": os.path.join(base_dir, f"{test_dataset}/train")
     }
     
     # Add additional datasets based on what's being mixed
