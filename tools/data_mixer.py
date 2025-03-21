@@ -37,7 +37,7 @@ def setup_directory_structure(base_dir, output_dir, datasets_to_mix, test_datase
         if not os.path.exists(link_path):
             try:
                 os.makedirs(os.path.dirname(link_path), exist_ok=True)
-                os.symlink(target, link_path)
+                os.symlink(target, link_path, True)
                 print(f"Created symlink: {link_path} -> {target}")
             except OSError as e:
                 print(f"Warning: Could not create symlink {link_path}: {e}")
