@@ -13,7 +13,7 @@ class Exp(BaseExp):
         self.seed = 42
         
         self.data_dir = "data/mix_mot20_ch"
-        self.train_ann = "train_half.json"
+        self.train_ann = "train.json"
         self.val_ann = "val_half.json"
         self.batch_size = 4
         self.test_ann = "test.json"
@@ -25,27 +25,27 @@ class Exp(BaseExp):
 
         self.input_size = (896, 1600)
         self.test_size = (896, 1600)
-        self.random_size = (18, 32)
+        self.random_size = (20, 36)
         
         self.max_epoch = 30
         self.no_aug_epochs = 5
-        self.warmup_epochs = 5
-        self.basic_lr_per_img = 0.001 / self.batch_size # Standard learning rate per image (adjustable with batch size)
+        self.warmup_epochs = 1
+        self.basic_lr_per_img = 0.001 / 64 
         
-        self.print_interval = 20
+        self.print_interval = 100
         self.eval_interval = 1
         
-        self.test_conf = 0.1
+        self.test_conf = 0.001
         self.nmsthre = 0.7
         
         self.save_history_ckpt = False
         
         # my props
         self.legacy = False
-        self.max_labels = 230
+        self.max_labels = 100
         
-        self.mosaic_scale = (0.8, 1.3)
-        self.mixup_scale = (0.8, 1.2)
+        self.mosaic_scale = (0.1, 2)
+        self.mixup_scale = (0.8, 1.6)
         #override using env vars
         self.set_envvars()
     
