@@ -234,7 +234,7 @@ def main():
     parser.add_argument("--output-dir", default="mix_det", help="Output directory for the mixed dataset")
     parser.add_argument("--test-dataset", choices=["mot", "mot20"], default="mot", help="Which dataset to use for validation and test")
     
-    parser.add_argument("--include", nargs="+", default=["crowdhuman_train", "crowdhuman_val", "ethz", "cityscapes"],
+    parser.add_argument("--include", nargs="+", default=[],
                         choices=["crowdhuman_train", "crowdhuman_val", "ethz", "cityscapes"],
                         help="Datasets to include in the mix")
     
