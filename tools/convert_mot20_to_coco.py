@@ -84,52 +84,61 @@ def process_split(data_path, out_path, split, half_video, sequence=None,
         print('{}: {} images processed out of {} total (sample rate: {})'.format(
             seq, valid_image_count, num_images, sample_rate))
 
-        anns = np.loadtxt(ann_path, dtype=np.float32, delimiter=',')
-        
-        for i in range(anns.shape[0]):
-            frame_id = int(anns[i][0])
-            if frame_id - 1 < image_range[0] or frame_id - 1 > image_range[1]:
-                continue
-                
-            # Skip annotations for frames that were skipped due to sampling
-            if (frame_id - 1 - image_range[0]) % sample_rate != 0:
-                continue
-                
-            track_id = int(anns[i][1])
-            cat_id = int(anns[i][7])
+        # Check if ground truth exists - only process annotations if it does
+        # For test split, we often don't have ground truth annotations
+        if os.path.exists(ann_path):
+            anns = np.loadtxt(ann_path, dtype=np.float32, delimiter=',')
             
-            # Check visibility (column 8 in MOT16 format contains visibility ratio)
-            # MOT16 format: [frame_id, track_id, bb_left, bb_top, bb_width, bb_height, confidence, class_id, visibility]
-            visibility = anns[i][8] if anns[i].shape[0] > 8 else 1.0
-            
-            # Skip objects with visibility below threshold
-            if visibility < visibility_threshold:
-                filtered_objects_count += 1
-                continue
+            for i in range(anns.shape[0]):
+                frame_id = int(anns[i][0])
+                if frame_id - 1 < image_range[0] or frame_id - 1 > image_range[1]:
+                    continue
+                    
+                # Skip annotations for frames that were skipped due to sampling
+                if (frame_id - 1 - image_range[0]) % sample_rate != 0:
+                    continue
+                    
+                track_id = int(anns[i][1])
+                cat_id = int(anns[i][7])
                 
-            ann_cnt += 1
-            if not (int(anns[i][6]) == 1):  # whether ignore.
-                continue
-            if int(anns[i][7]) in [3, 4, 5, 6, 9, 10, 11]:  # Non-person
-                continue
-            category_id = 1  # pedestrian(non-static)
-            if not track_id == tid_last:
-                tid_curr += 1
-                tid_last = track_id
+                # Check visibility (column 8 in MOT16 format contains visibility ratio)
+                # MOT16 format: [frame_id, track_id, bb_left, bb_top, bb_width, bb_height, confidence, class_id, visibility]
+                visibility = anns[i][8] if anns[i].shape[0] > 8 else 1.0
+                
+                # Skip objects with visibility below threshold
+                if visibility < visibility_threshold:
+                    filtered_objects_count += 1
+                    continue
+                    
+                ann_cnt += 1
+                if not (int(anns[i][6]) == 1):  # whether ignore.
+                    continue
+                if int(anns[i][7]) in [3, 4, 5, 6, 9, 10, 11]:  # Non-person
+                    continue
+                category_id = 1  # pedestrian(non-static)
+                if not track_id == tid_last:
+                    tid_curr += 1
+                    tid_last = track_id
+                
+                ann = {'id': ann_cnt,
+                       'category_id': category_id,
+                       'image_id': image_cnt + frame_id,
+                       'track_id': tid_curr,
+                       'bbox': anns[i][2:6].tolist(),
+                       'conf': float(anns[i][6]),
+                       'iscrowd': 0,
+                       'visibility': float(visibility),  # Add visibility to annotation
+                       'area': float(anns[i][4] * anns[i][5])}
+                out['annotations'].append(ann)
             
-            ann = {'id': ann_cnt,
-                   'category_id': category_id,
-                   'image_id': image_cnt + frame_id,
-                   'track_id': tid_curr,
-                   'bbox': anns[i][2:6].tolist(),
-                   'conf': float(anns[i][6]),
-                   'iscrowd': 0,
-                   'visibility': float(visibility),  # Add visibility to annotation
-                   'area': float(anns[i][4] * anns[i][5])}
-            out['annotations'].append(ann)
+            print(tid_curr, tid_last)
+        else:
+            if split == 'test':
+                print(f"No ground truth found for {seq} - skipping annotations for test split")
+            else:
+                print(f"WARNING: No ground truth found for {seq} in {split} split")
         
         image_cnt += num_images
-        print(tid_curr, tid_last)
     
     print('Processed {} split: {} images, {} annotations, {} objects filtered due to low visibility (sample rate: {}, visibility threshold: {})'.format(
         split, len(out['images']), len(out['annotations']), filtered_objects_count, sample_rate, visibility_threshold))
