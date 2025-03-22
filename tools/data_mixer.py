@@ -6,21 +6,24 @@ import shutil
 from pathlib import Path
 
 
-def setup_directory_structure(base_dir, output_dir, datasets_to_mix, test_dataset):
+def setup_directory_structure(base_dir, output_dir, datasets_to_mix):
     """Create the necessary directory structure and copy validation/test files."""
     print(f"Setting up directory structure in {output_dir}")
     
     # Create output directory and annotations subdirectory
     os.makedirs(os.path.join(base_dir, output_dir, "annotations"), exist_ok=True)
     
-    # Base datasets mapping
+    # Base datasets mapping (MOT20 is now the fixed test dataset)
     datasets = {
-        f"{test_dataset}_train": os.path.join(base_dir, f"{test_dataset}/train"),
-        f"train": os.path.join(base_dir, f"{test_dataset}/train"),
-        f"test": os.path.join(base_dir, f"{test_dataset}/test"),
+        "mot20_train": os.path.join(base_dir, "mot20/train"),
+        "train": os.path.join(base_dir, "mot20/train"),
+        "test": os.path.join(base_dir, "mot20/test"),
     }
     
     # Add additional datasets based on what's being mixed
+    if "mot" in datasets_to_mix:
+        datasets["mot_train"] = os.path.join(base_dir, "mot/train")
+        
     if "crowdhuman_train" in datasets_to_mix:
         datasets["crowdhuman_train"] = os.path.join(base_dir, "crowdhuman/train")
         
@@ -70,7 +73,7 @@ def process_mot_dataset(base_dir, dataset_name, output_dir):
 
 
 def process_additional_dataset(base_dir, dataset_info, max_img, max_ann, max_video):
-    """Process additional datasets (CrowdHuman, ETHZ, Cityscapes)."""
+    """Process additional datasets (MOT, CrowdHuman, ETHZ, Cityscapes)."""
     dataset_name = dataset_info["name"]
     json_path = os.path.join(base_dir, dataset_info["path"], "annotations", dataset_info["json"])
     folder_prefix = dataset_info["folder_prefix"]
@@ -117,9 +120,9 @@ def process_additional_dataset(base_dir, dataset_info, max_img, max_ann, max_vid
     }
 
 
-def copy_test_files(base_dir, source_dataset, output_dir):
-    """Copy test and validation files from source dataset."""
-    source_path = os.path.join(base_dir, source_dataset, "annotations")
+def copy_test_files(base_dir, output_dir):
+    """Copy test and validation files from MOT20 dataset."""
+    source_path = os.path.join(base_dir, "mot20", "annotations")
     dest_path = os.path.join(base_dir, output_dir, "annotations")
     
     test_files = {
@@ -138,25 +141,37 @@ def copy_test_files(base_dir, source_dataset, output_dir):
             print(f"Warning: Source file {src_file} not found")
 
 
-def mix_datasets(base_dir, output_dir, datasets_to_mix, test_dataset):
+def mix_datasets(base_dir, output_dir, datasets_to_mix):
     """Mix the specified datasets and save the result."""
     # Setup directory structure
-    setup_directory_structure(base_dir, output_dir, datasets_to_mix, test_dataset)
+    setup_directory_structure(base_dir, output_dir, datasets_to_mix)
     
-    # Copy test files from the selected test dataset
-    copy_test_files(base_dir, test_dataset, output_dir)
+    # Copy test files from MOT20 dataset
+    copy_test_files(base_dir, output_dir)
     
-    # Process the primary MOT dataset (either mot or mot20)
-    base_data = process_mot_dataset(base_dir, test_dataset, output_dir)
+    # Process the primary MOT20 dataset
+    base_data = process_mot_dataset(base_dir, "mot20", output_dir)
     img_list = base_data["images"]
     ann_list = base_data["annotations"]
     video_list = base_data["videos"]
     category_list = base_data["categories"]
     
-    print(f"Processed {test_dataset}")
+    print("Processed mot20")
     
     # Define additional datasets with their parameters
     additional_datasets = []
+    
+    if "mot" in datasets_to_mix:
+        additional_datasets.append({
+            "name": "MOT",
+            "path": "mot",
+            "json": "train.json",
+            "folder_prefix": "mot_train",
+            "video_name": "mot_train",
+            "max_img": 5000,
+            "max_ann": 1000000,
+            "max_video": 9
+        })
     
     if "crowdhuman_train" in datasets_to_mix:
         additional_datasets.append({
@@ -240,14 +255,13 @@ def mix_datasets(base_dir, output_dir, datasets_to_mix, test_dataset):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mix multiple detection datasets for training.")
+    parser = argparse.ArgumentParser(description="Mix multiple detection datasets for training with MOT20 as the test dataset.")
     
     parser.add_argument("--base-dir", default="datasets", help="Base directory containing all datasets")
     parser.add_argument("--output-dir", default="mix_det", help="Output directory for the mixed dataset")
-    parser.add_argument("--test-dataset", choices=["mot", "mot20"], default="mot", help="Which dataset to use for validation and test")
     
     parser.add_argument("--include", nargs="+", default=[],
-                        choices=["crowdhuman_train", "crowdhuman_val", "ethz", "cityscapes"],
+                        choices=["mot", "crowdhuman_train", "crowdhuman_val", "ethz", "cityscapes"],
                         help="Datasets to include in the mix")
     
     args = parser.parse_args()
@@ -255,10 +269,10 @@ def main():
     print(f"Starting dataset mixing with the following configuration:")
     print(f"  Base directory: {args.base_dir}")
     print(f"  Output directory: {args.output_dir}")
-    print(f"  Test dataset: {args.test_dataset}")
+    print(f"  Test dataset: mot20 (fixed)")
     print(f"  Datasets to include: {', '.join(args.include)}")
     
-    mix_datasets(args.base_dir, args.output_dir, args.include, args.test_dataset)
+    mix_datasets(args.base_dir, args.output_dir, args.include)
     
     print("Dataset mixing completed successfully!")
 
