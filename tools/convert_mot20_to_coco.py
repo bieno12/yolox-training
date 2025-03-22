@@ -112,6 +112,9 @@ def process_split(data_path, out_path, split, half_video, sequence=None,
                 continue
             if int(anns[i][7]) in [3, 4, 5, 6, 9, 10, 11]:  # Non-person
                 continue
+            if int(anns[i][7]) in [2, 7, 8, 12]:  # Ignored person
+                #category_id = -1
+                continue
             category_id = 1  # pedestrian(non-static)
             if not track_id == tid_last:
                 tid_curr += 1
