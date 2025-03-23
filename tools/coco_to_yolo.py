@@ -22,7 +22,27 @@ def coco_to_yolo_format(x, y, width, height, img_width, img_height):
     
     return x_center, y_center, norm_width, norm_height
 
-def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name):
+def extract_categories(json_files, dataset_dir):
+    """Extract all categories from multiple JSON files and create unified mapping."""
+    categories = {}
+    category_names = []
+    
+    for json_file in json_files:
+        if not os.path.exists(json_file):
+            continue
+            
+        with open(json_file, 'r') as f:
+            coco_data = json.load(f)
+            
+        for cat in coco_data.get('categories', []):
+            cat_id = cat['id']
+            if cat_id not in categories:
+                categories[cat_id] = len(categories)
+                category_names.append(cat['name'])
+    
+    return categories, category_names
+
+def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name, category_mapping):
     """Process COCO format annotations and convert to YOLO."""
     print(f"Processing {split_name} split...")
     
@@ -35,16 +55,6 @@ def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name):
     # Load COCO annotations
     with open(coco_file, 'r') as f:
         coco_data = json.load(f)
-    
-    # Create category ID to index mapping (YOLO uses sequential class indices)
-    category_mapping = {cat['id']: idx for idx, cat in enumerate(coco_data['categories'])}
-    
-    # Create a name to class file
-    names_file = os.path.join(output_dir, "data.names")
-    if not os.path.exists(names_file):
-        with open(names_file, 'w') as f:
-            for cat in sorted(coco_data['categories'], key=lambda x: category_mapping[x['id']]):
-                f.write(f"{cat['name']}\n")
     
     # Create a mapping from image ID to image details
     images_map = {img['id']: img for img in coco_data['images']}
@@ -105,6 +115,10 @@ def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name):
                     continue
                 
                 category_id = ann['category_id']
+                if category_id not in category_mapping:
+                    print(f"Warning: Category ID {category_id} not found in mapping. Skipping.")
+                    continue
+                    
                 yolo_class_id = category_mapping[category_id]
                 
                 # COCO bounding box format: [x, y, width, height]
@@ -125,7 +139,7 @@ def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name):
     print(f"Skipped {skipped_count} images with invalid dimensions")
     return len(image_annotations) - skipped_count
 
-def create_data_yaml(output_dir, class_count, train_count, val_count, test_count):
+def create_data_yaml(output_dir, class_names, train_count, val_count, test_count):
     """Create a YAML file for YOLO training configuration."""
     yaml_path = os.path.join(output_dir, "data.yaml")
     
@@ -135,15 +149,11 @@ def create_data_yaml(output_dir, class_count, train_count, val_count, test_count
         f.write("val: images/val\n")
         f.write("test: images/test\n\n")
         
-        f.write(f"nc: {class_count}  # number of classes\n")
+        f.write(f"nc: {len(class_names)}  # number of classes\n")
         f.write("names: [")
         
-        # Read class names from data.names
-        names_file = os.path.join(output_dir, "data.names")
-        with open(names_file, 'r') as nf:
-            class_names = [line.strip() for line in nf.readlines()]
-            class_names_str = ", ".join(f"'{name}'" for name in class_names)
-            f.write(f"{class_names_str}]\n\n")
+        class_names_str = ", ".join(f"'{name}'" for name in class_names)
+        f.write(f"{class_names_str}]\n\n")
             
         # Add dataset stats    
         f.write(f"# Dataset statistics\n")
@@ -169,10 +179,25 @@ def main():
     val_json = os.path.join(annotation_dir, "val_half.json")
     test_json = os.path.join(annotation_dir, "test.json")
     
+    # List of all json files
+    json_files = [train_json, val_json, test_json]
+    
     # Check if annotation files exist
-    for json_file, split_name in [(train_json, "train"), (val_json, "val"), (test_json, "test")]:
+    for json_file, split_name in zip(json_files, ["train", "val", "test"]):
         if not os.path.exists(json_file):
             print(f"Warning: {split_name} annotation file not found: {json_file}")
+    
+    # Extract all categories from all JSON files to create a unified mapping
+    print("Extracting categories from all annotation files...")
+    category_mapping, category_names = extract_categories(json_files, dataset_dir)
+    
+    # Create a name to class file
+    names_file = os.path.join(output_dir, "data.names")
+    with open(names_file, 'w') as f:
+        for name in category_names:
+            f.write(f"{name}\n")
+    
+    print(f"Found {len(category_names)} categories. Created {names_file}")
     
     # Process each split
     train_count = 0
@@ -180,29 +205,22 @@ def main():
     test_count = 0
     
     if os.path.exists(train_json):
-        train_count = process_coco_annotations(train_json, dataset_dir, output_dir, "train")
+        train_count = process_coco_annotations(train_json, dataset_dir, output_dir, "train", category_mapping)
     
     if os.path.exists(val_json):
-        val_count = process_coco_annotations(val_json, dataset_dir, output_dir, "val")
+        val_count = process_coco_annotations(val_json, dataset_dir, output_dir, "val", category_mapping)
     
     if os.path.exists(test_json):
-        test_count = process_coco_annotations(test_json, dataset_dir, output_dir, "test")
-    
-    # Get class count from names file
-    names_file = os.path.join(output_dir, "data.names")
-    class_count = 0
-    if os.path.exists(names_file):
-        with open(names_file, 'r') as f:
-            class_count = len(f.readlines())
+        test_count = process_coco_annotations(test_json, dataset_dir, output_dir, "test", category_mapping)
     
     # Create data.yaml for YOLOv5/YOLOv8 compatibility
-    create_data_yaml(output_dir, class_count, train_count, val_count, test_count)
+    create_data_yaml(output_dir, category_names, train_count, val_count, test_count)
     
     print(f"\nConversion complete!")
     print(f"Training images: {train_count}")
     print(f"Validation images: {val_count}")
     print(f"Test images: {test_count}")
-    print(f"Number of classes: {class_count}")
+    print(f"Number of classes: {len(category_names)}")
     print(f"Output directory: {output_dir}")
 
 if __name__ == "__main__":
