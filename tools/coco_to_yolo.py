@@ -15,12 +15,45 @@ def coco_to_yolo_format(x, y, width, height, img_width, img_height):
     COCO: (x, y) is the top-left corner of the bounding box
     YOLO: (x_center, y_center) is the center of the bounding box, all values normalized
     """
+    # Ensure that the box coordinates are within image boundaries
+    x = max(0, min(x, img_width - 1))
+    y = max(0, min(y, img_height - 1))
+    width = max(1, min(width, img_width - x))
+    height = max(1, min(height, img_height - y))
+    
+    # Convert to YOLO format (normalized coordinates)
     x_center = (x + width / 2) / img_width
     y_center = (y + height / 2) / img_height
     norm_width = width / img_width
     norm_height = height / img_height
     
+    # Ensure values are properly bounded between 0 and 1
+    x_center = max(0.0, min(1.0, x_center))
+    y_center = max(0.0, min(1.0, y_center))
+    norm_width = max(0.001, min(1.0, norm_width))  # Minimum width to avoid zero-sized boxes
+    norm_height = max(0.001, min(1.0, norm_height))  # Minimum height to avoid zero-sized boxes
+    
     return x_center, y_center, norm_width, norm_height
+
+def validate_yolo_bbox(x_center, y_center, width, height):
+    """
+    Validate that YOLO format bounding box coordinates are normalized and within bounds.
+    Returns True if valid, False otherwise.
+    """
+    # All values should be between 0 and 1
+    if not (0 <= x_center <= 1 and 0 <= y_center <= 1 and 0 < width <= 1 and 0 < height <= 1):
+        return False
+    
+    # Check if the box goes out of bounds
+    x_min = x_center - (width / 2)
+    y_min = y_center - (height / 2)
+    x_max = x_center + (width / 2)
+    y_max = y_center + (height / 2)
+    
+    if x_min < 0 or y_min < 0 or x_max > 1 or y_max > 1:
+        return False
+        
+    return True
 
 def extract_categories(json_files, dataset_dir):
     """Extract all categories from multiple JSON files and create unified mapping."""
@@ -69,16 +102,30 @@ def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name, cat
     
     # Process each image
     skipped_count = 0
+    invalid_bbox_count = 0
+    total_bbox_count = 0
+    
     for image_id, annotations in tqdm(image_annotations.items(), desc=f"Converting {split_name}"):
+        if image_id not in images_map:
+            print(f"Warning: Image ID {image_id} not found in images map. Skipping.")
+            skipped_count += 1
+            continue
+            
         image_info = images_map[image_id]
-        img_width, img_height = image_info['width'], image_info['height']
+        img_width, img_height = image_info.get('width', 0), image_info.get('height', 0)
         
-        # Skip if either dimension is zero
-        if img_width == 0 or img_height == 0:
+        # Skip if either dimension is zero or not provided
+        if img_width <= 0 or img_height <= 0:
+            print(f"Warning: Invalid image dimensions for {image_id}: {img_width}x{img_height}. Skipping.")
             skipped_count += 1
             continue
         
         # Relative image path (from COCO annotations)
+        if 'file_name' not in image_info:
+            print(f"Warning: No file_name for image ID {image_id}. Skipping.")
+            skipped_count += 1
+            continue
+            
         rel_img_path = image_info['file_name']
         
         # Apply path prefix if provided
@@ -115,6 +162,7 @@ def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name, cat
         label_filename = os.path.splitext(img_filename)[0] + '.txt'
         label_file_path = os.path.join(yolo_labels_dir, label_filename)
         
+        valid_boxes = 0
         with open(label_file_path, 'w') as f:
             for ann in annotations:
                 if 'bbox' not in ann:
@@ -129,20 +177,49 @@ def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name, cat
                 
                 # COCO bounding box format: [x, y, width, height]
                 bbox = ann['bbox']
+                total_bbox_count += 1
+                
                 if len(bbox) < 4:
+                    invalid_bbox_count += 1
                     continue
                     
                 x, y, width, height = bbox
+                
+                # Skip boxes with invalid dimensions
+                if width <= 0 or height <= 0:
+                    invalid_bbox_count += 1
+                    continue
                 
                 # Convert to YOLO format
                 x_center, y_center, norm_width, norm_height = coco_to_yolo_format(
                     x, y, width, height, img_width, img_height
                 )
                 
+                # Validate bounding box
+                if not validate_yolo_bbox(x_center, y_center, norm_width, norm_height):
+                    # Try to correct the box if possible
+                    # Clip center coordinates
+                    x_center = max(norm_width/2, min(1.0 - norm_width/2, x_center))
+                    y_center = max(norm_height/2, min(1.0 - norm_height/2, y_center))
+                    
+                    # Revalidate
+                    if not validate_yolo_bbox(x_center, y_center, norm_width, norm_height):
+                        invalid_bbox_count += 1
+                        continue
+                
                 # Write to file: class_id x_center y_center width height
                 f.write(f"{yolo_class_id} {x_center:.6f} {y_center:.6f} {norm_width:.6f} {norm_height:.6f}\n")
+                valid_boxes += 1
+        
+        # Remove empty annotation files
+        if valid_boxes == 0:
+            os.remove(label_file_path)
+            # Also remove the symlink if it exists
+            if os.path.exists(dst_img_path):
+                os.remove(dst_img_path)
     
-    print(f"Skipped {skipped_count} images with invalid dimensions")
+    print(f"Skipped {skipped_count} images with invalid properties")
+    print(f"Skipped {invalid_bbox_count} of {total_bbox_count} bounding boxes with invalid coordinates")
     return len(image_annotations) - skipped_count
 
 def create_data_yaml(output_dir, class_names, train_count, val_count, test_count):
