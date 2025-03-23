@@ -42,7 +42,7 @@ def extract_categories(json_files, dataset_dir):
     
     return categories, category_names
 
-def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name, category_mapping):
+def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name, category_mapping, path_prefix=None):
     """Process COCO format annotations and convert to YOLO."""
     print(f"Processing {split_name} split...")
     
@@ -80,6 +80,12 @@ def process_coco_annotations(coco_file, dataset_dir, output_dir, split_name, cat
         
         # Relative image path (from COCO annotations)
         rel_img_path = image_info['file_name']
+        
+        # Apply path prefix if provided
+        if path_prefix:
+            # Make sure we don't duplicate directories if the prefix is already in the path
+            if not rel_img_path.startswith(path_prefix):
+                rel_img_path = os.path.join(path_prefix, rel_img_path)
         
         # Full path to source image
         src_img_path = os.path.join(dataset_dir, rel_img_path)
@@ -165,6 +171,16 @@ def main():
     parser = argparse.ArgumentParser(description='Convert COCO annotations to YOLO format')
     parser.add_argument('--dataset_dir', required=True, help='Path to the dataset directory')
     parser.add_argument('--output_dir', required=True, help='Path to output YOLO dataset')
+    parser.add_argument('--annotation_dir', help='Path to annotation directory (relative to dataset_dir)', default='annotations')
+    
+    parser.add_argument('--train_json', help='Filename of training annotations JSON (in annotation_dir)', default='train.json')
+    parser.add_argument('--val_json', help='Filename of validation annotations JSON (in annotation_dir)', default='val_half.json')
+    parser.add_argument('--test_json', help='Filename of test annotations JSON (in annotation_dir)', default='test.json')
+    
+    parser.add_argument('--train_img_prefix', help='Prefix for train image paths', default='')
+    parser.add_argument('--val_img_prefix', help='Prefix for validation image paths', default='train')
+    parser.add_argument('--test_img_prefix', help='Prefix for test image paths', default='test')
+    
     args = parser.parse_args()
     
     dataset_dir = args.dataset_dir
@@ -174,10 +190,10 @@ def main():
     create_directory(output_dir)
     
     # Define annotation files
-    annotation_dir = os.path.join(dataset_dir, "annotations")
-    train_json = os.path.join(annotation_dir, "train.json")
-    val_json = os.path.join(annotation_dir, "val_half.json")
-    test_json = os.path.join(annotation_dir, "test.json")
+    annotation_dir = os.path.join(dataset_dir, args.annotation_dir)
+    train_json = os.path.join(annotation_dir, args.train_json)
+    val_json = os.path.join(annotation_dir, args.val_json)
+    test_json = os.path.join(annotation_dir, args.test_json)
     
     # List of all json files
     json_files = [train_json, val_json, test_json]
@@ -205,13 +221,16 @@ def main():
     test_count = 0
     
     if os.path.exists(train_json):
-        train_count = process_coco_annotations(train_json, dataset_dir, output_dir, "train", category_mapping)
+        train_count = process_coco_annotations(train_json, dataset_dir, output_dir, "train", 
+                                              category_mapping, args.train_img_prefix)
     
     if os.path.exists(val_json):
-        val_count = process_coco_annotations(val_json, dataset_dir, output_dir, "val", category_mapping)
+        val_count = process_coco_annotations(val_json, dataset_dir, output_dir, "val", 
+                                            category_mapping, args.val_img_prefix)
     
     if os.path.exists(test_json):
-        test_count = process_coco_annotations(test_json, dataset_dir, output_dir, "test", category_mapping)
+        test_count = process_coco_annotations(test_json, dataset_dir, output_dir, "test", 
+                                             category_mapping, args.test_img_prefix)
     
     # Create data.yaml for YOLOv5/YOLOv8 compatibility
     create_data_yaml(output_dir, category_names, train_count, val_count, test_count)
