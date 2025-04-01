@@ -12,8 +12,8 @@ class Exp(BaseExp):
         
         self.seed = 42
         
-        self.data_dir = "data/tracking"
-        self.train_ann = "train_half.json"
+        self.data_dir = "data/mix_mot20_mot_ch"
+        self.train_ann = "train.json"
         self.val_ann = "val_half.json"
         self.batch_size = 4
         self.test_ann = "test.json"
@@ -25,47 +25,32 @@ class Exp(BaseExp):
 
         self.input_size = (896, 1600)
         self.test_size = (896, 1600)
-        self.random_size = (18, 32)
+        
+        self.random_size = (28, 36)
         
         self.max_epoch = 30
-        self.no_aug_epochs = 5
-        self.warmup_epochs = 5
-        self.basic_lr_per_img = 0.001 / self.batch_size # Standard learning rate per image (adjustable with batch size)
+        self.no_aug_epochs = 10
+        self.warmup_epochs = 1
+        self.basic_lr_per_img = 0.001 / 64 
+        self.mosaic_scale = (0.8, 1.2)
+        self.mixup_scale = (0.8, 1.6)
         
-        self.print_interval = 20
-        self.eval_interval = 1
+        self.print_interval = 100
         
-        self.test_conf = 0.1
+        self.eval_interval = 3
+        
+        self.test_conf = 0.001
         self.nmsthre = 0.7
         
         self.save_history_ckpt = False
         
         # my props
         self.legacy = False
-        self.max_labels = 230
+        self.max_labels = 100
         
-        self.mosaic_scale = (0.8, 1.3)
-        self.mixup_scale = (0.8, 1.2)
+
         #override using env vars
         self.set_envvars()
-    
-    def get_model(self, sublinear=False):
-        def init_yolo(M):
-            for m in M.modules():
-                if isinstance(m, nn.BatchNorm2d):
-                    m.eps = 1e-3
-                    m.momentum = 0.03
-        if "model" not in self.__dict__:
-            from swyolox.models import YOLOX, SWYOLOPAFPN, YOLOXHead
-            in_channels = [256, 512, 1024]
-            # NANO model use depthwise = True, which is main difference.
-            backbone = SWYOLOPAFPN(self.depth, self.width, in_channels=in_channels, use_PE=True)
-            head = YOLOXHead(self.num_classes, self.width, in_channels=in_channels)
-            self.model = YOLOX(backbone, head)
-
-        self.model.apply(init_yolo)
-        self.model.head.initialize_biases(1e-2)
-        return self.model
     
     def set_envvars(self):
         for key, value in os.environ.items():
@@ -83,6 +68,25 @@ class Exp(BaseExp):
                         setattr(self, prop_name, new_value)
                     except (ValueError, SyntaxError) as e:
                         print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
+    
+    def get_model(self, sublinear=False):
+
+        def init_yolo(M):
+            for m in M.modules():
+                if isinstance(m, nn.BatchNorm2d):
+                    m.eps = 1e-3
+                    m.momentum = 0.03
+        if "model" not in self.__dict__:
+            from swyolox.models import YOLOX, SWYOLOPAFPN, YOLOXHead
+            in_channels = [256, 512, 1024]
+            # NANO model use depthwise = True, which is main difference.
+            backbone = SWYOLOPAFPN(self.depth, self.width, in_channels=in_channels, use_PE=True)
+            head = YOLOXHead(self.num_classes, self.width, in_channels=in_channels)
+            self.model = YOLOX(backbone, head)
+
+        self.model.apply(init_yolo)
+        self.model.head.initialize_biases(1e-2)
+        return self.model
                         
     def get_dataset(self, cache = False, cache_type = "ram"):
         from yolox.data import COCODataset, TrainTransform
@@ -100,7 +104,7 @@ class Exp(BaseExp):
         return COCODataset(
             data_dir=self.data_dir,
             json_file=self.train_ann,
-            name='train',
+            name='',
             img_size=self.input_size,
             preproc=transform,
             cache=cache,
