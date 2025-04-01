@@ -34,7 +34,25 @@ class Exp(BaseExp):
         self.basic_lr_per_img = 0.001 / 64
         self.output_dir = "./MOT20"
         self.seed = uuid.uuid4().int % 2**32
-
+        self.set_envvars()
+    
+    def set_envvars(self):
+        for key, value in os.environ.items():
+            if key.startswith("EXP_PROP_"):
+                prop_name = key[9:].lower()
+                if hasattr(self, prop_name):
+                    current_value = getattr(self, prop_name)
+                    try:
+                        if isinstance(current_value, bool):
+                            new_value = value.lower() == "true"
+                        elif isinstance(current_value, (list, tuple)):
+                            new_value = type(current_value)(eval(value))
+                        else:
+                            new_value = type(current_value)(value)
+                        setattr(self, prop_name, new_value)
+                    except (ValueError, SyntaxError) as e:
+                        print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
+    
     def get_model(self, sublinear=False):
 
         def init_yolo(M):
