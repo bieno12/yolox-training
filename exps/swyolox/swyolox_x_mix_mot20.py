@@ -12,7 +12,7 @@ class Exp(BaseExp):
         
         self.seed = 42
         
-        self.data_dir = "data/mix_mot20_mot_ch"
+        self.data_dir = "data/mix_mot20_ch"
         self.train_ann = "train.json"
         self.val_ann = "val_half.json"
         self.batch_size = 4
@@ -69,23 +69,24 @@ class Exp(BaseExp):
                     except (ValueError, SyntaxError) as e:
                         print(f"Warning: Could not convert {key}={value} to type {type(current_value).__name__}: {str(e)}")
     
-    def get_model(self, sublinear=False):
+    def get_model(self):
+        from swyolox.models import YOLOX, SWYOLOPAFPN, YOLOXHead
 
         def init_yolo(M):
             for m in M.modules():
                 if isinstance(m, nn.BatchNorm2d):
                     m.eps = 1e-3
                     m.momentum = 0.03
-        if "model" not in self.__dict__:
-            from swyolox.models import YOLOX, SWYOLOPAFPN, YOLOXHead
+
+        if getattr(self, "model", None) is None:
             in_channels = [256, 512, 1024]
-            # NANO model use depthwise = True, which is main difference.
-            backbone = SWYOLOPAFPN(self.depth, self.width, in_channels=in_channels, use_PE=True)
-            head = YOLOXHead(self.num_classes, self.width, in_channels=in_channels)
+            backbone = SWYOLOPAFPN(self.depth, self.width, in_channels=in_channels, act=self.act)
+            head = YOLOXHead(self.num_classes, self.width, in_channels=in_channels, act=self.act)
             self.model = YOLOX(backbone, head)
 
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
+        self.model.train()
         return self.model
                         
     def get_dataset(self, cache = False, cache_type = "ram"):
