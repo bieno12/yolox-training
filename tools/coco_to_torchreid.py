@@ -239,7 +239,7 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
             
             # Add to metadata (img_path, pid, camid)
             relative_path = os.path.join('images', 'train', target_name)
-            train_metadata.append((relative_path, sequential_id, 0))  # Using camid=0 for all
+            train_metadata.append((relative_path, sequential_id, 0))  # Using camid=0 for all training samples
     
     # Save train metadata
     train_meta_path = os.path.join(dataset_dir, 'splits', 'train.txt')
@@ -267,7 +267,7 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
         # We need at least one sample in each
         split_point = max(1, len(detections) // 2)
         
-        # Process query samples (first half)
+        # Process query samples (first half) - using camid=0
         for i, detection in enumerate(detections[:split_point]):
             image_id = detection['image_id']
             file_name = detection['file_name']
@@ -293,11 +293,11 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
                     print(f"Error processing {src_img_path}: {e}")
                     continue
             
-            # Add to query metadata
+            # Add to query metadata with camid=0
             relative_path = os.path.join('images', 'query', target_name)
             query_metadata.append((relative_path, sequential_id, 0))
         
-        # Process gallery samples (second half)
+        # Process gallery samples (second half) - using camid=1 for cross-camera matching
         for i, detection in enumerate(detections[split_point:]):
             image_id = detection['image_id']
             file_name = detection['file_name']
@@ -308,7 +308,7 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
             if not os.path.exists(src_img_path):
                 continue
             
-            target_name = f"{sequential_id:04d}_c1s1_{i+split_point:06d}_{int(detection['visibility']*100):02d}.jpg"
+            target_name = f"{sequential_id:04d}_c2s1_{i+split_point:06d}_{int(detection['visibility']*100):02d}.jpg"
             target_path = os.path.join(dataset_dir, 'images', 'gallery', target_name)
             
             if args.copy_images:
@@ -323,9 +323,9 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
                     print(f"Error processing {src_img_path}: {e}")
                     continue
             
-            # Add to gallery metadata
+            # Add to gallery metadata with camid=1
             relative_path = os.path.join('images', 'gallery', target_name)
-            gallery_metadata.append((relative_path, sequential_id, 0))
+            gallery_metadata.append((relative_path, sequential_id, 1))
     
     # Save query metadata
     query_meta_path = os.path.join(dataset_dir, 'splits', 'query.txt')
@@ -342,24 +342,18 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
             f.write(f'{img_path} {pid} {camid}\n')
     
     print(f"Saved {len(gallery_metadata)} entries to {gallery_meta_path}")
+    
+    # Verify that all query IDs appear in gallery
     query_ids = set(pid for _, pid, _ in query_metadata)
     gallery_ids = set(pid for _, pid, _ in gallery_metadata)
     missing_ids = query_ids - gallery_ids
-
+    
     if missing_ids:
         print(f"WARNING: {len(missing_ids)} query IDs are missing from gallery!")
         print(f"Missing IDs: {missing_ids}")
-        
-        # Fix the issue by ensuring at least one sample for each ID in gallery
-        for track_id in splits['test']:
-            pid = id_mapping[track_id]
-            if pid in missing_ids:
-                print(f"Adding missing ID {pid} to gallery")
-                # Get a sample from this ID and add to gallery
-                if tracks[track_id]:
-                    detection = tracks[track_id][0]  # Use the first detection
-                    # Process and add to gallery
-
+    else:
+        print("SUCCESS: All query IDs appear in gallery.")
+    
     # Create a report on dataset statistics
     create_dataset_report(tracks, id_mapping, dataset_dir)
     
@@ -409,24 +403,33 @@ def create_dataset_report(tracks, id_mapping, dataset_dir):
 
 
 def check_dataset_structure(dataset_dir):
+    """Check the integrity of the created dataset."""
     print("\nChecking dataset structure...")
     # Load the split files
     query_pids = set()
     gallery_pids = set()
+    query_camids = {}
+    gallery_camids = {}
     
     with open(os.path.join(dataset_dir, 'splits', 'query.txt'), 'r') as f:
         for line in f:
             parts = line.strip().split()
-            if len(parts) >= 2:
+            if len(parts) >= 3:
                 pid = int(parts[1])
+                camid = int(parts[2])
                 query_pids.add(pid)
+                query_camids[pid] = query_camids.get(pid, set())
+                query_camids[pid].add(camid)
     
     with open(os.path.join(dataset_dir, 'splits', 'gallery.txt'), 'r') as f:
         for line in f:
             parts = line.strip().split()
-            if len(parts) >= 2:
+            if len(parts) >= 3:
                 pid = int(parts[1])
+                camid = int(parts[2])
                 gallery_pids.add(pid)
+                gallery_camids[pid] = gallery_camids.get(pid, set())
+                gallery_camids[pid].add(camid)
     
     print(f"Found {len(query_pids)} unique IDs in query")
     print(f"Found {len(gallery_pids)} unique IDs in gallery")
@@ -436,6 +439,20 @@ def check_dataset_structure(dataset_dir):
         print(f"ERROR: {len(missing)} query IDs missing from gallery: {missing}")
     else:
         print("SUCCESS: All query IDs appear in gallery!")
+    
+    # Check if camera IDs are different
+    same_camera_count = 0
+    for pid in query_pids:
+        if pid in gallery_pids:
+            q_camids = query_camids[pid]
+            g_camids = gallery_camids[pid]
+            if q_camids == g_camids and len(q_camids) == 1 and len(g_camids) == 1:
+                same_camera_count += 1
+    
+    if same_camera_count > 0:
+        print(f"WARNING: {same_camera_count} IDs have the same camera ID in both query and gallery")
+    else:
+        print("SUCCESS: All IDs have different camera IDs in query and gallery")
 
 
 def main():
@@ -454,8 +471,11 @@ def main():
     # Split dataset - simplified to ensure identities appear in both query and gallery
     splits = split_dataset(tracks, args.train_ratio)
     
-    # Create TorchReID dataset with proper sample distribution
+    # Create TorchReID dataset with proper sample distribution and different camera IDs
     dataset_dir = create_torchreid_dataset(tracks, images_info, splits, args)
+    
+    # Check dataset structure to verify it's valid for evaluation
+    check_dataset_structure(dataset_dir)
     
     print(f"Dataset created at: {dataset_dir}")
     
@@ -490,8 +510,8 @@ class {args.dataset_name.capitalize()}Dataset(ImageDataset):
             img_name = os.path.basename(img_path)
             parts = img_name.split('_')
             pid = int(parts[0])
-            # The last part now contains visibility info in the filename
-            data.append((img_path, pid, 0))  # camid=0
+            camid = 0 if 'c1' in parts[1] else 1  # Extract camera ID from filename
+            data.append((img_path, pid, camid))
             
         return data
 
@@ -499,7 +519,9 @@ class {args.dataset_name.capitalize()}Dataset(ImageDataset):
 import torchreid
 torchreid.data.register_image_dataset('{args.dataset_name}', {args.dataset_name.capitalize()}Dataset)
     """)
-    check_dataset_structure(dataset_dir)
+    
+    print("\nTo test the dataset directly, run:")
+    print("engine.run(test_only=True)")
 
 
 if __name__ == "__main__":
