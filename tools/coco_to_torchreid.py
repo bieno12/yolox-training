@@ -155,7 +155,7 @@ def process_coco_annotations(coco_json_path, min_bbox_size, min_samples, max_ove
 
 
 def split_dataset(tracks, train_ratio, query_ratio):
-    """Split dataset into train, query, and gallery sets."""
+    """Split dataset into train, query, and gallery sets ensuring all query IDs appear in gallery."""
     # Get all track_ids
     track_ids = list(tracks.keys())
     random.shuffle(track_ids)
@@ -167,10 +167,10 @@ def split_dataset(tracks, train_ratio, query_ratio):
     train_ids = track_ids[:n_train]
     test_ids = track_ids[n_train:]
     
-    n_test = len(test_ids)
-    n_query = int(n_test * query_ratio)
-    query_ids = test_ids[:n_query]
-    gallery_ids = test_ids[n_query:]
+    # For test identities, all will be in both query and gallery
+    # This ensures query identities appear in gallery
+    query_ids = test_ids.copy()
+    gallery_ids = test_ids.copy()
     
     splits = {
         'train': train_ids,
@@ -183,7 +183,7 @@ def split_dataset(tracks, train_ratio, query_ratio):
 
 
 def create_torchreid_dataset(tracks, images_info, splits, args):
-    """Create TorchReID dataset structure."""
+    """Create TorchReID dataset structure with proper sample distribution."""
     dataset_dir = os.path.join(args.output_dir, args.dataset_name)
     
     # Create directory structure
@@ -197,6 +197,8 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
     next_id = 0
     
     # Process each split
+    split_metadata = {}
+    
     for split_name, track_ids in splits.items():
         print(f"Processing {split_name} split...")
         metadata = []
@@ -209,40 +211,100 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
             
             sequential_id = id_mapping[track_id]
             
-            # Process each detection for this identity (already sorted by visibility)
-            for i, detection in enumerate(tracks[track_id]):
-                image_id = detection['image_id']
-                file_name = detection['file_name']
-                bbox = detection['bbox']  # [x, y, width, height]
-                
-                # Source image path
-                src_img_path = os.path.join(args.images_dir, file_name)
-                
-                if not os.path.exists(src_img_path):
-                    print(f"Warning: Image {src_img_path} not found, skipping")
-                    continue
-                
-                # Target file name and path
-                target_name = f"{sequential_id:04d}_c1s1_{i:06d}_{int(detection['visibility']*100):02d}.jpg"
-                target_path = os.path.join(dataset_dir, 'images', split_name, target_name)
-                
-                # Copy the image or create a crop
-                if args.copy_images:
-                    shutil.copy(src_img_path, target_path)
-                else:
-                    # Create a crop
-                    try:
-                        with Image.open(src_img_path) as img:
-                            x, y, w, h = [int(v) for v in bbox]
-                            crop = img.crop((x, y, x+w, y+h))
-                            crop.save(target_path)
-                    except Exception as e:
-                        print(f"Error processing {src_img_path}: {e}")
+            if split_name == 'train':
+                # Process all detections for training identities
+                for i, detection in enumerate(tracks[track_id]):
+                    image_id = detection['image_id']
+                    file_name = detection['file_name']
+                    bbox = detection['bbox']  # [x, y, width, height]
+                    
+                    # Source image path
+                    src_img_path = os.path.join(args.images_dir, file_name)
+                    
+                    if not os.path.exists(src_img_path):
+                        print(f"Warning: Image {src_img_path} not found, skipping")
                         continue
+                    
+                    # Target file name and path
+                    target_name = f"{sequential_id:04d}_c1s1_{i:06d}_{int(detection['visibility']*100):02d}.jpg"
+                    target_path = os.path.join(dataset_dir, 'images', split_name, target_name)
+                    
+                    # Copy the image or create a crop
+                    if args.copy_images:
+                        shutil.copy(src_img_path, target_path)
+                    else:
+                        # Create a crop
+                        try:
+                            with Image.open(src_img_path) as img:
+                                x, y, w, h = [int(v) for v in bbox]
+                                crop = img.crop((x, y, x+w, y+h))
+                                crop.save(target_path)
+                        except Exception as e:
+                            print(f"Error processing {src_img_path}: {e}")
+                            continue
+                    
+                    # Add to metadata (img_path, pid, camid)
+                    relative_path = os.path.join('images', split_name, target_name)
+                    metadata.append((relative_path, sequential_id, 0))  # Using camid=0 for all
+            
+            else:  # query or gallery
+                # For test identities, split samples between query and gallery
+                samples = tracks[track_id]
+                num_samples = len(samples)
                 
-                # Add to metadata (img_path, pid, camid)
-                relative_path = os.path.join('images', split_name, target_name)
-                metadata.append((relative_path, sequential_id, 0))  # Using camid=0 for all
+                if num_samples < 2:
+                    # If only one sample, put a copy in both query and gallery
+                    query_samples = 1
+                    gallery_samples = 1
+                else:
+                    # Split samples approximately in half
+                    query_samples = max(1, num_samples // 2)
+                    gallery_samples = num_samples - query_samples
+                
+                # Determine which samples go to query and gallery
+                if split_name == 'query':
+                    # First half of samples go to query
+                    target_samples = samples[:query_samples]
+                else:  # gallery
+                    # Second half of samples go to gallery
+                    target_samples = samples[query_samples:]
+                
+                # Process the samples
+                for i, detection in enumerate(target_samples):
+                    image_id = detection['image_id']
+                    file_name = detection['file_name']
+                    bbox = detection['bbox']
+                    
+                    # Source image path
+                    src_img_path = os.path.join(args.images_dir, file_name)
+                    
+                    if not os.path.exists(src_img_path):
+                        print(f"Warning: Image {src_img_path} not found, skipping")
+                        continue
+                    
+                    # Target file name and path
+                    target_name = f"{sequential_id:04d}_c1s1_{i:06d}_{int(detection['visibility']*100):02d}.jpg"
+                    target_path = os.path.join(dataset_dir, 'images', split_name, target_name)
+                    
+                    # Copy the image or create a crop
+                    if args.copy_images:
+                        shutil.copy(src_img_path, target_path)
+                    else:
+                        # Create a crop
+                        try:
+                            with Image.open(src_img_path) as img:
+                                x, y, w, h = [int(v) for v in bbox]
+                                crop = img.crop((x, y, x+w, y+h))
+                                crop.save(target_path)
+                        except Exception as e:
+                            print(f"Error processing {src_img_path}: {e}")
+                            continue
+                    
+                    # Add to metadata
+                    relative_path = os.path.join('images', split_name, target_name)
+                    metadata.append((relative_path, sequential_id, 0))
+        
+        split_metadata[split_name] = metadata
         
         # Save metadata for this split
         metadata_path = os.path.join(dataset_dir, 'splits', f'{split_name}.txt')
@@ -252,13 +314,50 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
         
         print(f"Saved {len(metadata)} entries to {metadata_path}")
     
+    # Verify that all query identities appear in gallery
+    query_pids = set(pid for _, pid, _ in split_metadata['query'])
+    gallery_pids = set(pid for _, pid, _ in split_metadata['gallery'])
+    missing_pids = query_pids - gallery_pids
+    
+    if missing_pids:
+        print(f"Warning: {len(missing_pids)} query identities missing from gallery")
+        print("Adding these missing identities to gallery...")
+        
+        # Add missing identities to gallery
+        gallery_metadata = split_metadata['gallery']
+        for pid in missing_pids:
+            # Find samples for this PID from query set
+            pid_samples = [(path, id, camid) for path, id, camid in split_metadata['query'] if id == pid]
+            
+            if pid_samples:
+                # Use the first sample
+                gallery_metadata.append(pid_samples[0])
+                
+                # Copy the image to gallery
+                query_path = os.path.join(dataset_dir, pid_samples[0][0])
+                gallery_path = query_path.replace('query', 'gallery')
+                
+                if os.path.exists(query_path):
+                    target_dir = os.path.dirname(gallery_path)
+                    if not os.path.exists(target_dir):
+                        os.makedirs(target_dir)
+                    shutil.copy(query_path, gallery_path)
+        
+        # Save updated gallery metadata
+        metadata_path = os.path.join(dataset_dir, 'splits', 'gallery.txt')
+        with open(metadata_path, 'w') as f:
+            for img_path, pid, camid in gallery_metadata:
+                f.write(f'{img_path} {pid} {camid}\n')
+        
+        print(f"Updated gallery size: {len(gallery_metadata)}")
+    
     # Create a report on dataset statistics
-    create_dataset_report(tracks, id_mapping, dataset_dir)
+    create_dataset_report(tracks, id_mapping, dataset_dir, split_metadata)
     
     return dataset_dir
 
 
-def create_dataset_report(tracks, id_mapping, dataset_dir):
+def create_dataset_report(tracks, id_mapping, dataset_dir, split_metadata):
     """Create a report with dataset statistics."""
     report_path = os.path.join(dataset_dir, 'dataset_report.txt')
     
@@ -296,8 +395,59 @@ def create_dataset_report(tracks, id_mapping, dataset_dir):
         for range_name, count in visibility_ranges.items():
             percentage = count / len(all_visibility) * 100
             f.write(f"  {range_name}: {count} samples ({percentage:.1f}%)\n")
+        
+        # Split statistics
+        f.write("\nSplit statistics:\n")
+        for split_name, metadata in split_metadata.items():
+            num_samples = len(metadata)
+            num_identities = len(set(pid for _, pid, _ in metadata))
+            f.write(f"  {split_name}: {num_samples} samples, {num_identities} identities\n")
+        
+        # Check identity overlap
+        query_pids = set(pid for _, pid, _ in split_metadata['query'])
+        gallery_pids = set(pid for _, pid, _ in split_metadata['gallery'])
+        common_pids = query_pids.intersection(gallery_pids)
+        
+        f.write(f"\nIdentity overlap: {len(common_pids)} identities appear in both query and gallery\n")
+        f.write(f"All query identities in gallery: {len(query_pids - gallery_pids) == 0}\n")
     
     print(f"Dataset report created at {report_path}")
+
+
+def analyze_dataset_split(dataset_dir):
+    """Analyze the query and gallery identities to find any mismatch."""
+    split_query_path = os.path.join(dataset_dir, 'splits', 'query.txt')
+    split_gallery_path = os.path.join(dataset_dir, 'splits', 'gallery.txt')
+    
+    query_pids = set()
+    gallery_pids = set()
+    
+    # Load query identities
+    if os.path.exists(split_query_path):
+        with open(split_query_path, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    query_pids.add(int(parts[1]))
+    
+    # Load gallery identities
+    if os.path.exists(split_gallery_path):
+        with open(split_gallery_path, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    gallery_pids.add(int(parts[1]))
+    
+    # Find missing identities
+    missing_pids = query_pids - gallery_pids
+    
+    print(f"Query identities: {len(query_pids)}")
+    print(f"Gallery identities: {len(gallery_pids)}")
+    print(f"Missing identities: {len(missing_pids)}")
+    if missing_pids:
+        print(f"Missing PIDs: {sorted(list(missing_pids))[:10]}...")
+    
+    return len(missing_pids) == 0
 
 
 def main():
@@ -319,7 +469,14 @@ def main():
     # Create TorchReID dataset
     dataset_dir = create_torchreid_dataset(tracks, images_info, splits, args)
     
+    # Analyze the dataset split
+    all_identities_present = analyze_dataset_split(dataset_dir)
+    
     print(f"Dataset created at: {dataset_dir}")
+    if all_identities_present:
+        print("All query identities are present in gallery - dataset is ready for evaluation.")
+    else:
+        print("Warning: Some query identities are missing from gallery. Use the `combineall=True` option in TorchReID's datamanager.")
     
     # Instructions for using with TorchReID
     print("\nTo use this dataset with TorchReID, add the following code:")
@@ -334,32 +491,72 @@ class {args.dataset_name.capitalize()}Dataset(ImageDataset):
     def __init__(self, root='', **kwargs):
         self.root = os.path.abspath(root)
         self.dataset_dir = os.path.join(self.root, self.dataset_dir)
-        self.train_dir = os.path.join(self.dataset_dir, 'images', 'train')
-        self.query_dir = os.path.join(self.dataset_dir, 'images', 'query')
-        self.gallery_dir = os.path.join(self.dataset_dir, 'images', 'gallery')
-
-        train = self._process_dir(self.train_dir, is_train=True)
-        query = self._process_dir(self.query_dir, is_train=False)
-        gallery = self._process_dir(self.gallery_dir, is_train=False)
-
+        
+        # Directly load data from split files
+        train = self._process_split_file(os.path.join(self.dataset_dir, 'splits', 'train.txt'))
+        query = self._process_split_file(os.path.join(self.dataset_dir, 'splits', 'query.txt'))
+        gallery = self._process_split_file(os.path.join(self.dataset_dir, 'splits', 'gallery.txt'))
+        
+        # Debug information
+        print(f"Train samples: {{len(train)}}")
+        print(f"Query samples: {{len(query)}}")
+        print(f"Gallery samples: {{len(gallery)}}")
+        
+        query_pids = set([item[1] for item in query])
+        gallery_pids = set([item[1] for item in gallery])
+        print(f"Query identities: {{len(query_pids)}}")
+        print(f"Gallery identities: {{len(gallery_pids)}}")
+        print(f"Missing identities: {{len(query_pids - gallery_pids)}}")
+        
         super({args.dataset_name.capitalize()}Dataset, self).__init__(train, query, gallery, **kwargs)
 
-    def _process_dir(self, dir_path, is_train=True):
-        data = []
-        img_paths = glob.glob(os.path.join(dir_path, '*.jpg'))
-        
-        for img_path in img_paths:
-            img_name = os.path.basename(img_path)
-            parts = img_name.split('_')
-            pid = int(parts[0])
-            # The last part now contains visibility info in the filename
-            data.append((img_path, pid, 0))  # camid=0
+    def _process_split_file(self, filepath):
+        '''Process the split file.'''
+        if not os.path.exists(filepath):
+            print(f"Warning: Split file {{filepath}} does not exist")
+            return []
             
+        data = []
+        with open(filepath, 'r') as f:
+            lines = f.readlines()
+            
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            try:
+                img_path, pid, camid = line.split()
+                # Convert relative path to absolute
+                img_path = os.path.join(self.dataset_dir, img_path)
+                
+                if not os.path.exists(img_path):
+                    print(f"Warning: Image {{img_path}} does not exist")
+                    continue
+                    
+                data.append((img_path, int(pid), int(camid)))
+            except Exception as e:
+                print(f"Error processing line {{line}}: {{e}}")
+                continue
+                
         return data
 
 # Then register your dataset
 import torchreid
 torchreid.data.register_image_dataset('{args.dataset_name}', {args.dataset_name.capitalize()}Dataset)
+
+# Create the data manager with combineall option
+datamanager = torchreid.data.ImageDataManager(
+    root="data",
+    sources="{args.dataset_name}",
+    targets="{args.dataset_name}",
+    height=256,
+    width=128,
+    batch_size_train=32,
+    batch_size_test=100,
+    transforms=['random_flip', 'random_crop'],
+    combineall=True  # This ensures all query identities are present in gallery
+)
     """)
 
 
