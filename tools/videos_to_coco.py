@@ -80,7 +80,7 @@ def create_coco_dataset(videos_dir, output_dir, sample_rate=1):
         sample_rate: Extract every nth frame
     """
     # Create output directories
-    frames_dir = os.path.join(output_dir, "images")
+    frames_dir = os.path.join(output_dir, "test")
     annotations_dir = os.path.join(output_dir, "annotations")
     
     os.makedirs(frames_dir, exist_ok=True)
