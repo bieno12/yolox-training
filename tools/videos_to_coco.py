@@ -6,13 +6,14 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 
-def extract_frames(video_path, output_dir, sample_rate=1):
+def extract_frames(video_path, output_dir, video_id, sample_rate=1):
     """
     Extract frames from a video file.
     
     Args:
         video_path: Path to the video file
         output_dir: Directory to save extracted frames
+        video_id: Numeric ID for the video (zero-padded)
         sample_rate: Extract every nth frame
     
     Returns:
@@ -31,10 +32,9 @@ def extract_frames(video_path, output_dir, sample_rate=1):
     width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    print(f"Processing video: {video_path}")
+    print(f"Processing video {video_id:06d}: {video_path}")
     print(f"Total frames: {frame_count}, FPS: {fps}, Resolution: {width}x{height}")
     
-    video_name = os.path.splitext(os.path.basename(video_path))[0]
     frames_info = []
     
     frame_id = 0
@@ -47,7 +47,8 @@ def extract_frames(video_path, output_dir, sample_rate=1):
                 break
             
             if frame_id % sample_rate == 0:
-                frame_filename = f"{video_name}_{frame_id:06d}.jpg"
+                # Use zero-padded video ID and frame ID in filename
+                frame_filename = f"{video_id:06d}_{frame_id:06d}.jpg"
                 frame_path = os.path.join(output_dir, frame_filename)
                 cv2.imwrite(frame_path, frame)
                 
@@ -55,7 +56,7 @@ def extract_frames(video_path, output_dir, sample_rate=1):
                     "file_name": os.path.join(os.path.basename(output_dir), frame_filename),
                     "id": frame_index + 1,
                     "frame_id": frame_id,
-                    "video_id": video_name,
+                    "video_id": video_id,
                     "height": height,
                     "width": width,
                     "prev_image_id": frame_index if frame_index > 0 else -1,
@@ -80,7 +81,7 @@ def create_coco_dataset(videos_dir, output_dir, sample_rate=1):
         sample_rate: Extract every nth frame
     """
     # Create output directories
-    frames_dir = os.path.join(output_dir, "test")
+    frames_dir = os.path.join(output_dir, "images")
     annotations_dir = os.path.join(output_dir, "annotations")
     
     os.makedirs(frames_dir, exist_ok=True)
@@ -95,7 +96,6 @@ def create_coco_dataset(videos_dir, output_dir, sample_rate=1):
     }
     
     # Process each video file
-    video_count = 0
     image_count = 0
     video_files = []
     
@@ -103,21 +103,21 @@ def create_coco_dataset(videos_dir, output_dir, sample_rate=1):
     for ext in ['.mp4', '.avi', '.mov', '.mkv']:
         video_files.extend(list(Path(videos_dir).glob(f'**/*{ext}')))
     
-    for video_file in video_files:
-        video_count += 1
-        video_name = video_file.stem
+    for video_idx, video_file in enumerate(video_files):
+        # Use zero-padded numbers as video IDs, starting from 1
+        video_id = video_idx + 1
         
         # Add video info
         coco_data["videos"].append({
-            "id": video_count,
-            "file_name": video_name
+            "id": video_id,
+            "file_name": f"{video_id:06d}"  # Zero-padded video ID
         })
         
         # Create directory for this video's frames
-        video_frames_dir = os.path.join(frames_dir, video_name)
+        video_frames_dir = os.path.join(frames_dir, f"{video_id:06d}")
         
         # Extract frames
-        frames_info = extract_frames(str(video_file), video_frames_dir, sample_rate)
+        frames_info = extract_frames(str(video_file), video_frames_dir, video_id, sample_rate)
         
         # Update image IDs to ensure they're continuous across videos
         for frame in frames_info:
@@ -137,7 +137,7 @@ def create_coco_dataset(videos_dir, output_dir, sample_rate=1):
         json.dump(coco_data, f, indent=4)
     
     print(f"Dataset created successfully: {output_path}")
-    print(f"Processed {video_count} videos with {image_count} frames total")
+    print(f"Processed {len(video_files)} videos with {image_count} frames total")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert videos to COCO format dataset")
