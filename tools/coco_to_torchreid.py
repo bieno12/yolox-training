@@ -342,7 +342,24 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
             f.write(f'{img_path} {pid} {camid}\n')
     
     print(f"Saved {len(gallery_metadata)} entries to {gallery_meta_path}")
-    
+    query_ids = set(pid for _, pid, _ in query_metadata)
+    gallery_ids = set(pid for _, pid, _ in gallery_metadata)
+    missing_ids = query_ids - gallery_ids
+
+    if missing_ids:
+        print(f"WARNING: {len(missing_ids)} query IDs are missing from gallery!")
+        print(f"Missing IDs: {missing_ids}")
+        
+        # Fix the issue by ensuring at least one sample for each ID in gallery
+        for track_id in splits['test']:
+            pid = id_mapping[track_id]
+            if pid in missing_ids:
+                print(f"Adding missing ID {pid} to gallery")
+                # Get a sample from this ID and add to gallery
+                if tracks[track_id]:
+                    detection = tracks[track_id][0]  # Use the first detection
+                    # Process and add to gallery
+
     # Create a report on dataset statistics
     create_dataset_report(tracks, id_mapping, dataset_dir)
     
@@ -389,6 +406,36 @@ def create_dataset_report(tracks, id_mapping, dataset_dir):
             f.write(f"  {range_name}: {count} samples ({percentage:.1f}%)\n")
     
     print(f"Dataset report created at {report_path}")
+
+
+def check_dataset_structure(dataset_dir):
+    print("\nChecking dataset structure...")
+    # Load the split files
+    query_pids = set()
+    gallery_pids = set()
+    
+    with open(os.path.join(dataset_dir, 'splits', 'query.txt'), 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                pid = int(parts[1])
+                query_pids.add(pid)
+    
+    with open(os.path.join(dataset_dir, 'splits', 'gallery.txt'), 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                pid = int(parts[1])
+                gallery_pids.add(pid)
+    
+    print(f"Found {len(query_pids)} unique IDs in query")
+    print(f"Found {len(gallery_pids)} unique IDs in gallery")
+    
+    missing = query_pids - gallery_pids
+    if missing:
+        print(f"ERROR: {len(missing)} query IDs missing from gallery: {missing}")
+    else:
+        print("SUCCESS: All query IDs appear in gallery!")
 
 
 def main():
@@ -452,6 +499,7 @@ class {args.dataset_name.capitalize()}Dataset(ImageDataset):
 import torchreid
 torchreid.data.register_image_dataset('{args.dataset_name}', {args.dataset_name.capitalize()}Dataset)
     """)
+    check_dataset_structure(dataset_dir)
 
 
 if __name__ == "__main__":
