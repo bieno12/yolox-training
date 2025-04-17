@@ -37,16 +37,19 @@ def extract_frames(video_path, output_dir, video_id, sample_rate=1):
     
     frames_info = []
     
-    frame_id = 0
     frame_index = 0
     
     with tqdm(total=frame_count) as pbar:
+        frame_counter = 0
         while True:
             ret, frame = video.read()
             if not ret:
                 break
             
-            if frame_id % sample_rate == 0:
+            # Make frame_id start from 1 instead of 0
+            frame_id = frame_counter + 1
+            
+            if frame_counter % sample_rate == 0:
                 # Use zero-padded video ID and frame ID in filename
                 frame_filename = f"{video_id:06d}_{frame_id:06d}.jpg"
                 frame_path = os.path.join(output_dir, frame_filename)
@@ -55,17 +58,17 @@ def extract_frames(video_path, output_dir, video_id, sample_rate=1):
                 frame_info = {
                     "file_name": os.path.join(os.path.basename(output_dir), frame_filename),
                     "id": frame_index + 1,
-                    "frame_id": frame_id,
+                    "frame_id": frame_id,  # This now starts from 1
                     "video_id": video_id,
                     "height": height,
                     "width": width,
                     "prev_image_id": frame_index if frame_index > 0 else -1,
-                    "next_image_id": frame_index + 2 if frame_id < frame_count - 1 else -1
+                    "next_image_id": frame_index + 2 if frame_counter < frame_count - 1 else -1
                 }
                 frames_info.append(frame_info)
                 frame_index += 1
             
-            frame_id += 1
+            frame_counter += 1
             pbar.update(1)
     
     video.release()
@@ -81,7 +84,7 @@ def create_coco_dataset(videos_dir, output_dir, sample_rate=1):
         sample_rate: Extract every nth frame
     """
     # Create output directories
-    frames_dir = os.path.join(output_dir, "test")
+    frames_dir = os.path.join(output_dir, "images")
     annotations_dir = os.path.join(output_dir, "annotations")
     
     os.makedirs(frames_dir, exist_ok=True)
