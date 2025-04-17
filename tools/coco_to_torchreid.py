@@ -230,12 +230,27 @@ def create_torchreid_dataset(tracks, images_info, splits, args):
                 # Create a crop
                 try:
                     with Image.open(src_img_path) as img:
+                        # Get image dimensions
+                        img_width, img_height = img.size
+                        
+                        # Ensure bbox is within image boundaries
                         x, y, w, h = [int(v) for v in bbox]
+                        x = max(0, x)
+                        y = max(0, y)
+                        w = min(w, img_width - x)
+                        h = min(h, img_height - y)
+                        
+                        # Skip invalid boxes
+                        if w <= 0 or h <= 0:
+                            print(f"Warning: Invalid bbox dimensions for {src_img_path}, skipping")
+                            continue
+                            
                         crop = img.crop((x, y, x+w, y+h))
                         crop.save(target_path)
                 except Exception as e:
                     print(f"Error processing {src_img_path}: {e}")
                     continue
+
             
             # Add to metadata (img_path, pid, camid)
             relative_path = os.path.join('images', 'train', target_name)
